@@ -1267,24 +1267,23 @@ def translate_workshop_assets(
 	log_prefix
 ):
 	"""Translate workshop titles/descriptions and update cache metadata."""
-	has_metadata = os.path.exists(metadata_path)
 	has_description_file = os.path.exists(workshop_description_path)
-	if not has_metadata and not has_description_file:
-		print(f"{log_prefix}No workshop metadata or description found; skipping workshop translations.")
+	if not has_description_file:
+		print(f"{log_prefix}Workshop description not found: {workshop_description_path}; skipping workshop translations.")
 		return False
 
 	title = load_workshop_title(metadata_path)
 	raw_description = load_workshop_description(workshop_description_path)
 	translatable_description, _ = split_workshop_description(raw_description)
 	description = apply_workshop_item_id(translatable_description, workshop_item_id)
+	if description is None:
+		print(f"{log_prefix}Workshop description could not be read; skipping workshop translations.")
+		return False
+
 	translation_template = resolve_workshop_translation_template(
 		workshop_template_path,
 		main_workshop_template_path
 	)
-
-	if title is None and description is None:
-		print(f"{log_prefix}No workshop title or description available; skipping workshop translations.")
-		return False
 
 	os.makedirs(workshop_translations_dir, exist_ok=True)
 
