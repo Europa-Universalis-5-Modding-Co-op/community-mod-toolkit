@@ -129,6 +129,7 @@ To use the script:
 ### translate.py
 Auto-translates localization files using DeepL or Gemini-3-Flash, and can optionally translate Steam Workshop titles/descriptions using DeepL or Gemini-3-Flash.
 It reads from `main_menu/localization/<source_language>` and writes translated `.yml` files for every EU5 supported language.
+Localization translation and workshop translation are independent, so either side can be missing and the script will continue with what is available.
 
 #### Setup
 1. Copy `.env-template` to `.env`.
@@ -154,6 +155,26 @@ It reads from `main_menu/localization/<source_language>` and writes translated `
 python scripts/translate.py
 ```
 
+To translate the main mod and every submod in `submods/`:
+```bash
+python scripts/translate.py --submods
+```
+
+#### Optional Inputs
+Every input part is optional (localization files, workshop metadata, workshop description, and workshop template), and the script processes whatever exists.
+Example: if a submod has only `workshop/workshop-description.bbcode` and no localization folder, `python scripts/translate.py --submods` still translates that workshop description and skips localization for that submod.
+
+#### --submods Path Layout
+When `--submods` is used, `translate.py` processes the main mod and each folder under `submods/`.
+
+For each submod `submods/<submod_name>`:
+* Localization source is read from `submods/<submod_name>/main_menu/localization/<source_language>/`.
+* Translated localization files are written to `submods/<submod_name>/main_menu/localization/<target_language>/`.
+* Workshop title is read from `submods/<submod_name>/.metadata/metadata.json` (`name`, with trailing ` Dev` removed).
+* Workshop description is read from `submods/<submod_name>/workshop/workshop-description.bbcode`.
+* Workshop translation outputs are written to `submods/<submod_name>/workshop/translations/`.
+* Workshop template path is `submods/<submod_name>/workshop/translations/translation_template.txt` (fallback order: submod template, then main template, then default format).
+
 #### Behavior
 * Preserves EU5 localization tags like `[...], $...$, @...!, #...#!`.
 * Automatically skips lines that consist purely of tags or formatting characters.
@@ -161,7 +182,7 @@ python scripts/translate.py
 #### Caching and Updates
 * Hashes are stored in `scripts/dependencies/.translate_hashes.json`; delete this file to force re-translation.
 * Localization keys that have not changed since the last translation are skipped.
-* Workshop descriptions are re-translated only when `assets/workshop/workshop-description.bbcode` changes, or when the selected provider changes.
+* Workshop descriptions are re-translated only when the corresponding `workshop-description.bbcode` changes (main mod or submod), or when the selected provider changes.
 * Workshop titles are generated once and never overwritten (delete the translated title files to force re-translation).
 * To disable an output language, remove its entry from `TARGET_LANGUAGES` in `scripts/translate.py`.
 
@@ -180,7 +201,9 @@ python scripts/translate.py
 
 #### Workshop Output
 * Translated workshop titles/descriptions are written to `assets/workshop/translations/`.
-* You can customize the output format by editing `assets/workshop/translations/translation_template.txt`.
+* When using `--submods`, workshop outputs are written per submod to `submods/<submod_name>/workshop/translations/`.
+* You can customize the output format by editing `assets/workshop/translations/translation_template.txt` (or each submod template path when using `--submods`).
+* Template resolution order for submods is: submod template -> main mod template -> built-in default format.
 * Keep the `===WORKSHOP_TITLE===` and `===WORKSHOP_DESCRIPTION===` markers in the template.
 * If the template is missing or invalid, the script falls back to the default output format.
 

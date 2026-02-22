@@ -985,7 +985,6 @@ def _remove_dev_suffix(name):
 def load_workshop_title(metadata_path):
 	"""Load the workshop title from metadata.json and remove dev suffix."""
 	if not os.path.exists(metadata_path):
-		print(f"Warning: Metadata file not found: {metadata_path}")
 		return None
 	try:
 		with open(metadata_path, "r", encoding="utf-8-sig") as f:
@@ -1004,7 +1003,6 @@ def load_workshop_title(metadata_path):
 def load_workshop_description(description_path):
 	"""Read the workshop description source text."""
 	if not os.path.exists(description_path):
-		print(f"Warning: Workshop description file not found: {description_path}")
 		return None
 	try:
 		with open(description_path, "r", encoding="utf-8-sig") as f:
@@ -1052,10 +1050,23 @@ def load_workshop_translation_template(template_path):
 		return None
 
 	if WORKSHOP_TITLE_MARKER not in template or WORKSHOP_DESCRIPTION_MARKER not in template:
-		print("Warning: translation_template.txt is missing required markers; falling back to default output.")
+		print(f"Warning: Workshop translation template '{template_path}' is missing required markers; ignoring it.")
 		return None
 
 	return template
+
+def resolve_workshop_translation_template(primary_template_path, fallback_template_path):
+	"""Load workshop template, falling back to fallback_template_path when needed."""
+	template = load_workshop_translation_template(primary_template_path)
+	if template is not None:
+		return template
+
+	primary_norm = os.path.normcase(os.path.normpath(primary_template_path))
+	fallback_norm = os.path.normcase(os.path.normpath(fallback_template_path))
+	if primary_norm == fallback_norm:
+		return None
+
+	return load_workshop_translation_template(fallback_template_path)
 
 def render_workshop_translation_text(
 	template,
@@ -1252,16 +1263,27 @@ def translate_workshop_assets(
 	workshop_description_path,
 	workshop_translations_dir,
 	workshop_template_path,
+	main_workshop_template_path,
 	log_prefix
 ):
 	"""Translate workshop titles/descriptions and update cache metadata."""
+	has_metadata = os.path.exists(metadata_path)
+	has_description_file = os.path.exists(workshop_description_path)
+	if not has_metadata and not has_description_file:
+		print(f"{log_prefix}No workshop metadata or description found; skipping workshop translations.")
+		return False
+
 	title = load_workshop_title(metadata_path)
 	raw_description = load_workshop_description(workshop_description_path)
 	translatable_description, _ = split_workshop_description(raw_description)
 	description = apply_workshop_item_id(translatable_description, workshop_item_id)
-	translation_template = load_workshop_translation_template(workshop_template_path)
+	translation_template = resolve_workshop_translation_template(
+		workshop_template_path,
+		main_workshop_template_path
+	)
 
 	if title is None and description is None:
+		print(f"{log_prefix}No workshop title or description available; skipping workshop translations.")
 		return False
 
 	os.makedirs(workshop_translations_dir, exist_ok=True)
@@ -1431,71 +1453,69 @@ def main():
 		log_prefix = target["log_prefix"]
 		loc_base_path = target["loc_base_path"]
 		source_dir = os.path.join(loc_base_path, source_language)
-
-		if not os.path.exists(source_dir):
-			if cache_key == "main":
-				print(f"Error: Source directory not found: {source_dir}")
-				return
-			print(f"{log_prefix}Source directory not found: {source_dir}; skipping.")
-			continue
-
 		cache_bucket = get_cache_bucket(hash_data, cache_key)
 		file_hashes = cache_bucket["files"]
 		processed_files = set()
 
-		for root, _, files in os.walk(source_dir):
-			for file in files:
-				if not file.endswith(".yml"):
-					continue
-
-				source_filepath = os.path.join(root, file)
-				with open(source_filepath, 'r', encoding='utf-8-sig') as f:
-					source_lines = f.readlines()
-
-				# Build per-key hashes from the source file.
-				source_entries = parse_source_entries(source_lines)
-				source_hashes = {}
-				for entry in source_entries:
-					source_hashes[entry["key"]] = hash_text(entry["value"])
-
-				source_rel_path = os.path.relpath(source_filepath, loc_base_path)
-				processed_files.add(source_rel_path)
-
-				# Determine which keys changed since last run.
-				prev_hashes = file_hashes.get(source_rel_path, {})
-				changed_keys = set()
-				for key, current_hash in source_hashes.items():
-					if prev_hashes.get(key) != current_hash:
-						changed_keys.add(key)
-
-				for folder_name, deepl_code in TARGET_LANGUAGES.items():
-					if folder_name == source_language:
+		if os.path.exists(source_dir):
+			for root, _, files in os.walk(source_dir):
+				for file in files:
+					if not file.endswith(".yml"):
 						continue
-					process_file(
-						translator,
-						source_lines,
-						source_entries,
-						source_filepath,
-						loc_base_path,
-						folder_name,
-						deepl_code,
-						source_lang_id,
-						source_lang_deepl,
-						changed_keys,
-						localization_translator,
-						gemini_localization_system_prompt,
-						log_prefix
-					)
 
-				# Persist updated hashes for this file.
-				if prev_hashes != source_hashes:
-					file_hashes[source_rel_path] = source_hashes
+					source_filepath = os.path.join(root, file)
+					with open(source_filepath, 'r', encoding='utf-8-sig') as f:
+						source_lines = f.readlines()
+
+					# Build per-key hashes from the source file.
+					source_entries = parse_source_entries(source_lines)
+					source_hashes = {}
+					for entry in source_entries:
+						source_hashes[entry["key"]] = hash_text(entry["value"])
+
+					source_rel_path = os.path.relpath(source_filepath, loc_base_path)
+					processed_files.add(source_rel_path)
+
+					# Determine which keys changed since last run.
+					prev_hashes = file_hashes.get(source_rel_path, {})
+					changed_keys = set()
+					for key, current_hash in source_hashes.items():
+						if prev_hashes.get(key) != current_hash:
+							changed_keys.add(key)
+
+					for folder_name, deepl_code in TARGET_LANGUAGES.items():
+						if folder_name == source_language:
+							continue
+						process_file(
+							translator,
+							source_lines,
+							source_entries,
+							source_filepath,
+							loc_base_path,
+							folder_name,
+							deepl_code,
+							source_lang_id,
+							source_lang_deepl,
+							changed_keys,
+							localization_translator,
+							gemini_localization_system_prompt,
+							log_prefix
+						)
+
+					# Persist updated hashes for this file.
+					if prev_hashes != source_hashes:
+						file_hashes[source_rel_path] = source_hashes
+						hashes_modified = True
+
+			# Drop cache entries for source files that no longer exist.
+			for rel_path in list(file_hashes.keys()):
+				if rel_path not in processed_files:
+					del file_hashes[rel_path]
 					hashes_modified = True
-
-		# Drop cache entries for source files that no longer exist.
-		for rel_path in list(file_hashes.keys()):
-			if rel_path not in processed_files:
-				del file_hashes[rel_path]
+		else:
+			print(f"{log_prefix}Localization source directory not found: {source_dir}; skipping localization translation.")
+			if file_hashes:
+				file_hashes.clear()
 				hashes_modified = True
 
 		# Optionally translate workshop title/description.
@@ -1514,6 +1534,7 @@ def main():
 				target["workshop_description_path"],
 				target["workshop_translations_dir"],
 				target["workshop_template_path"],
+				WORKSHOP_TRANSLATION_TEMPLATE_PATH,
 				log_prefix
 			) or hashes_modified
 
