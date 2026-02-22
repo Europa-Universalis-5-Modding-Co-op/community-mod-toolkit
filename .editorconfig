@@ -15,3 +15,7 @@ charset = utf-8-bom
 [*.yml]
 indent_style = space
 indent_size = 1
+
+[*.bbcode]
+indent_style = space
+indent_size = 1

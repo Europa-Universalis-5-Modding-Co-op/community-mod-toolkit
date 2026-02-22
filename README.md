@@ -144,7 +144,7 @@ It reads from `main_menu/localization/<source_language>` and writes translated `
    * `workshop_title_translator` (deepl or gemini-3-flash)
    * `gemini_title_system_prompt`
 5. If using workshop translations:
-   * Put your workshop description in `assets/workshop/workshop-description.txt`.
+   * Put your workshop description in `assets/workshop/workshop-description.bbcode`.
    * Your workshop title is pulled from `.metadata/metadata.json` (`name`), with a trailing ` Dev` removed if present.
    * `$item-id$` in the description is replaced with `workshop_upload_item_id` before translating and uploading.
 6. Install the dependencies using `pip install -r scripts/dependencies/requirements.txt` (if you ran the setup script, this is already done)
@@ -161,7 +161,7 @@ python scripts/translate.py
 #### Caching and Updates
 * Hashes are stored in `scripts/dependencies/.translate_hashes.json`; delete this file to force re-translation.
 * Localization keys that have not changed since the last translation are skipped.
-* Workshop descriptions are re-translated only when `assets/workshop/workshop-description.txt` changes, or when the selected provider changes.
+* Workshop descriptions are re-translated only when `assets/workshop/workshop-description.bbcode` changes, or when the selected provider changes.
 * Workshop titles are generated once and never overwritten (delete the translated title files to force re-translation).
 * To disable an output language, remove its entry from `TARGET_LANGUAGES` in `scripts/translate.py`.
 
@@ -195,7 +195,7 @@ Uploads Steam Workshop titles/descriptions for the native language and any trans
 
 Setup:
 1. Make sure Steam is running, and you are logged into the account that owns the workshop item.
-2. Ensure your workshop description exists at `assets/workshop/workshop-description.txt`.
+2. Ensure your workshop description exists at `assets/workshop/workshop-description.bbcode`.
 3. Set the upload settings in `scripts/config.toml`:
    * `workshop_upload_item_id` The numeric ID at the end of your mod's Workshop URL.
 	 ![mod-id-location.png](assets/images/mod-id-location.png)
