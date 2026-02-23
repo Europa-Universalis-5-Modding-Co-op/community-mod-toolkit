@@ -162,6 +162,7 @@ Localization translation and workshop translation are independent, so either sid
    * `localization_translator` (deepl or gemini-3-flash)
    * `gemini_localization_system_prompt`
    * `translate_workshop` (true/false)
+   * `translate_submods_by_default` (true/false; default false)
    * `workshop_description_translator` (deepl or gemini-3-flash)
    * `gemini_description_system_prompt`
    * `workshop_title_translator` (deepl or gemini-3-flash)
@@ -181,6 +182,10 @@ To translate the main mod and every submod in `submods/`:
 ```bash
 python scripts/translate.py --submods
 ```
+
+To include submods by default without passing `--submods`:
+* Set `translate_submods_by_default = true` in `scripts/config.toml`.
+* Then `python scripts/translate.py` will process the main mod and all submods.
 
 #### Optional Inputs
 Every input part is optional (localization files, workshop metadata, workshop description, and workshop template), and the script processes whatever exists.

@@ -118,21 +118,23 @@ def _parse_positive_int(value, label):
 
 def load_config(config_path):
 	"""Load config.toml and validate required keys and values."""
+	invalid = (None,) * 10
+
 	if not os.path.exists(config_path):
 		print(f"Error: Config file not found: {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	try:
 		with open(config_path, "rb") as f:
 			data = tomllib.load(f)
 	except Exception as e:
 		print(f"Error reading config file: {e}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	source_language = data.get("source_language")
 	if not source_language:
 		print(f"Error: source_language not set in {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	source_language = str(source_language).strip().lower()
 
@@ -140,94 +142,103 @@ def load_config(config_path):
 		valid = ", ".join(sorted(LANGUAGE_CONFIG.keys()))
 		print(f"Error: Unsupported source_language '{source_language}'.")
 		print(f"Supported values: {valid}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	if "localization_translator" not in data:
 		print(f"Error: localization_translator not set in {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	localization_translator = data.get("localization_translator")
 	if not isinstance(localization_translator, str):
 		print("Error: localization_translator must be a string.")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	if localization_translator not in ALLOWED_LOCALIZATION_TRANSLATORS:
 		valid = ", ".join(sorted(ALLOWED_LOCALIZATION_TRANSLATORS))
 		print(f"Error: Unsupported localization_translator '{localization_translator}'.")
 		print(f"Supported values: {valid}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	if "gemini_localization_system_prompt" not in data:
 		print(f"Error: gemini_localization_system_prompt not set in {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	gemini_localization_system_prompt = data.get("gemini_localization_system_prompt")
 	if not isinstance(gemini_localization_system_prompt, str) or not gemini_localization_system_prompt.strip():
 		print("Error: gemini_localization_system_prompt must be a non-empty string.")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	if "translate_workshop" not in data:
 		print(f"Error: translate_workshop not set in {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	translate_workshop = data.get("translate_workshop")
 	if not isinstance(translate_workshop, bool):
 		print("Error: translate_workshop must be a boolean (true/false).")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
+
+	if "translate_submods_by_default" not in data:
+		print(f"Error: translate_submods_by_default not set in {config_path}")
+		return invalid
+	translate_submods_by_default = data.get("translate_submods_by_default")
+	if not isinstance(translate_submods_by_default, bool):
+		print("Error: translate_submods_by_default must be a boolean (true/false).")
+		return invalid
 
 	if "workshop_description_translator" not in data:
 		print(f"Error: workshop_description_translator not set in {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	workshop_description_translator = data.get("workshop_description_translator")
 	if not isinstance(workshop_description_translator, str):
 		print("Error: workshop_description_translator must be a string.")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	if workshop_description_translator not in ALLOWED_WORKSHOP_DESCRIPTION_TRANSLATORS:
 		valid = ", ".join(sorted(ALLOWED_WORKSHOP_DESCRIPTION_TRANSLATORS))
 		print(f"Error: Unsupported workshop_description_translator '{workshop_description_translator}'.")
 		print(f"Supported values: {valid}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	if "workshop_title_translator" not in data:
 		print(f"Error: workshop_title_translator not set in {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	workshop_title_translator = data.get("workshop_title_translator")
 	if not isinstance(workshop_title_translator, str):
 		print("Error: workshop_title_translator must be a string.")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	if workshop_title_translator not in ALLOWED_WORKSHOP_TITLE_TRANSLATORS:
 		valid = ", ".join(sorted(ALLOWED_WORKSHOP_TITLE_TRANSLATORS))
 		print(f"Error: Unsupported workshop_title_translator '{workshop_title_translator}'.")
 		print(f"Supported values: {valid}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	if "gemini_description_system_prompt" not in data:
 		print(f"Error: gemini_description_system_prompt not set in {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	gemini_description_system_prompt = data.get("gemini_description_system_prompt")
 	if not isinstance(gemini_description_system_prompt, str) or not gemini_description_system_prompt.strip():
 		print("Error: gemini_description_system_prompt must be a non-empty string.")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	if "gemini_title_system_prompt" not in data:
 		print(f"Error: gemini_title_system_prompt not set in {config_path}")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 	gemini_title_system_prompt = data.get("gemini_title_system_prompt")
 	if not isinstance(gemini_title_system_prompt, str) or not gemini_title_system_prompt.strip():
 		print("Error: gemini_title_system_prompt must be a non-empty string.")
-		return None, None, None, None, None, None, None, None, None
+		return invalid
 
 	workshop_item_id = None
 	if translate_workshop:
 		if "workshop_upload_item_id" not in data:
 			print(f"Error: workshop_upload_item_id not set in {config_path}")
-			return None, None, None, None, None, None, None, None, None
+			return invalid
 		workshop_item_id = _parse_positive_int(
 			data.get("workshop_upload_item_id"),
 			"workshop_upload_item_id"
 		)
 		if workshop_item_id is None:
-			return None, None, None, None, None, None, None, None, None
+			return invalid
 
 	return (
 		source_language,
 		translate_workshop,
+		translate_submods_by_default,
 		localization_translator,
 		gemini_localization_system_prompt,
 		workshop_description_translator,
@@ -245,7 +256,7 @@ def parse_args():
 	parser.add_argument(
 		"--submods",
 		action="store_true",
-		help="Also process all submods under submods/*."
+		help="Also process all submods under submods/* (overrides translate_submods_by_default for this run)."
 	)
 	return parser.parse_args()
 
@@ -1419,6 +1430,7 @@ def main():
 	(
 		source_language,
 		translate_workshop,
+		translate_submods_by_default,
 		localization_translator,
 		gemini_localization_system_prompt,
 		workshop_description_translator,
@@ -1437,8 +1449,9 @@ def main():
 	hash_data = load_hashes(HASHES_PATH)
 	hashes_modified = False
 
-	targets = build_translation_targets(args.submods)
-	if args.submods:
+	include_submods = args.submods or translate_submods_by_default
+	targets = build_translation_targets(include_submods)
+	if include_submods:
 		active_submods = {target["cache_key"] for target in targets if target["cache_key"] != "main"}
 		submods_cache = hash_data.get("submods")
 		if isinstance(submods_cache, dict):
