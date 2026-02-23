@@ -23,7 +23,7 @@ eu5-mod-devkit/
 ├── scripts/                    # Automation scripts
 │   ├── dependencies/           # SteamworksPy DLLs, steam_appid.txt, requirements.txt, and steamworks module
 │   ├── setup.py                 # Initial project setup script
-│   ├── upload-mod.py            # Build a minimal release folder and upload it to Steam Workshop
+│   ├── upload.py            # Build a minimal release folder and upload it to Steam Workshop
 │   ├── translate.py             # Auto-translate localization files with DeepL or Gemini
 │   ├── create-devkit-release.sh # (Internal) Devkit release management
 │   └── reset-release.sh         # (Internal) Devkit release management
@@ -74,7 +74,7 @@ If you are familiar with Git, you can also manually add the remote for ease of u
 
 ## Provided Tools
 
-### upload-mod.py
+### upload.py
 Builds a minimal release folder and uploads to Steam Workshop, and can also upload Workshop page titles/descriptions.
 * Tooling, git files, and anything else you don't want on the workshop will get omitted from the release version.
 * Separate IDs, names, and (optionally) thumbnails allow you to easily swap between your dev, and workshop versions through the in-game mod manager.
@@ -93,7 +93,7 @@ To use the script:
    * The dev thumbnail will use `.metadata/thumbnail.png`.
    * Make the release thumbnail `.metadata/thumbnail-release.png` (if it does not exist, the `.metadata/thumbnail.png` will be used for both).
 3. **(optionally) Configure Included Files**: By default, the release version only includes the `.metadata/`, `in_game/` and `main_menu/` folders.
-   * If you want to include more files (i.e., LICENSE), you can add them to the `SOURCES` list in `scripts/upload-mod.py`.
+   * If you want to include more files (i.e., LICENSE), you can add them to the `SOURCES` list in `scripts/upload.py`.
 4. **Set the Workshop item ID**: Update `workshop_upload_item_id` in `scripts/config.toml`, or set it to `0` to create a new item on first upload.
 5. **Set default upload targets**: Configure `upload_mod_by_default` and `upload_workshop_pages_by_default` in `scripts/config.toml`.
 6. **(optional) Configure dev uploads**: Set `workshop_upload_item_id_dev` (or `0` for first-time creation) and `workshop_dev_name` in `scripts/config.toml` for `--dev`.
@@ -108,36 +108,36 @@ To use the script:
    workshop_id = 0
    ```
    Any submod found in `submods/` without a matching `mod_id` entry will be uploaded as a new Workshop item and written back to the config.
-8. **Run `upload-mod.py`**: When ready to run uploads using your configured default targets (Steam must be running):
+8. **Run `upload.py`**: When ready to run uploads using your configured default targets (Steam must be running):
    ```bash
-   python scripts/upload-mod.py
+   python scripts/upload.py
    ```
    If mod upload is enabled, this will create a new folder `../mod-name-release` with:
    * The metadata.json file from `.metadata/` with " Dev" and ".dev" removed from the name and id respectively.
    * The thumbnail from `.metadata/thumbnail-release.png` or the default thumbnail if it doesn't exist.
-   * The `in_game/`, `main_menu/` and any other files specified in the `SOURCES` list of `scripts/upload-mod.py`.
+   * The `in_game/`, `main_menu/` and any other files specified in the `SOURCES` list of `scripts/upload.py`.
    * Uploads that release folder to the Workshop item specified in `scripts/config.toml`.
    If workshop-page upload is enabled, it also uploads title/description updates from workshop source/translation files.
 9. **(optional) Run a dev upload**:
    ```bash
-   python scripts/upload-mod.py --dev
+   python scripts/upload.py --dev
    ```
    This will create a new folder `../mod-name-dev` and upload it using the dev Workshop item id, keeping the dev mod id and dev thumbnail.
 10. **(optional) Upload only mod files**:
    ```bash
-   python scripts/upload-mod.py --mod
+   python scripts/upload.py --mod
    ```
 11. **(optional) Upload only workshop pages**:
    ```bash
-   python scripts/upload-mod.py --workshop-pages
+   python scripts/upload.py --workshop-pages
    ```
 12. **(optional) Upload both explicitly (ignoring config defaults)**:
    ```bash
-   python scripts/upload-mod.py --mod --workshop-pages
+   python scripts/upload.py --mod --workshop-pages
    ```
 13. **(optional) Upload submods**:
    ```bash
-   python scripts/upload-mod.py --submods
+   python scripts/upload.py --submods
    ```
    This uploads every submod in `submods/` using its metadata `id` and `name`, creating Workshop items as needed.
 
@@ -230,7 +230,7 @@ For each submod `submods/<submod_name>`:
 
 ## Credits
 
-`upload-mod.py` uses [SteamworksPy](https://github.com/philippj/SteamworksPy) by Philipp J for Steam Workshop uploads and page updates.
+`upload.py` uses [SteamworksPy](https://github.com/philippj/SteamworksPy) by Philipp J for Steam Workshop uploads and page updates.
 
 ## License
 
