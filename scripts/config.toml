@@ -1,9 +1,9 @@
 ### Translation ###
 source_language = "english" # Options: english, french, german, spanish, polish, russian, simp_chinese, turkish, braz_por, japanese, korean
-localization_translator = "deepl" # Options: deepl, gemini-3-flash
-gemini_localization_system_prompt = "You are a professional localization translator. Translate the user's Europa Universalis localization text into {target_language}. Preserve any bracketed tokens, variables, and EU5 markup exactly. Do not add commentary; output only the translated text."
 translate_workshop = true # Auto-translate workshop title/description into other languages
 translate_submods_by_default = false # Should running translate.py include all submods from submods/? You can also use --submods instead.
+localization_translator = "deepl" # Options: deepl, gemini-3-flash
+gemini_localization_system_prompt = "You are a professional localization translator. Translate the user's Europa Universalis localization text into {target_language}. Preserve any bracketed tokens, variables, and EU5 markup exactly. Do not add commentary; output only the translated text."
 workshop_description_translator = "gemini-3-flash" # Options: deepl, gemini-3-flash - better, but only 20 free requests per day (Each run takes 10 requests per description, and 10 per title)
 gemini_description_system_prompt = "You are a professional Steam mod page translator. Translate the user's Europa Unversalis mod description into {target_language}. Preserve all BBCode tags, list markers, URLs, and bracketed tokens exactly. Do not add commentary; output only the translated text."
 workshop_title_translator = "gemini-3-flash" # Options: deepl, gemini-3-flash - highly recommended at least for title. But I would also recommend just using Gemini-3-Pro using the website (api has no free requests)
