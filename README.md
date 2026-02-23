@@ -86,6 +86,7 @@ Builds a minimal release folder and uploads to Steam Workshop, and can also uplo
 * Use `--dev` to target the dev Workshop item with the dev thumbnail and name.
 * If the configured Workshop item id is `0`, the script will create a new item and write the id back to `scripts/config.toml`.
 * Use `--submods` to upload submods from `submods/` using the `[[submods]]` mapping in `scripts/config.toml`.
+* Optional version gating (`upload_only_on_version_change`) only uploads mod/submods when `metadata.json` `version` changed since the last successful upload.
 
 To use the script:
 1. **Modify Metadata**: Edit `.metadata/metadata.json` adding ` Dev` and `.dev` to the name and id respectively.
@@ -96,8 +97,11 @@ To use the script:
    * If you want to include more files (i.e., LICENSE), you can add them to the `SOURCES` list in `scripts/upload.py`.
 4. **Set the Workshop item ID**: Update `workshop_upload_item_id` in `scripts/config.toml`, or set it to `0` to create a new item on first upload.
 5. **Set default upload targets**: Configure `upload_mod_by_default`, `upload_workshop_pages_by_default`, and `upload_submods_by_default` in `scripts/config.toml`.
-6. **(optional) Configure dev uploads**: Set `workshop_upload_item_id_dev` (or `0` for first-time creation) and `workshop_dev_name` in `scripts/config.toml` for `--dev`.
-7. **(optional) Configure submods**: Add `[[submods]]` entries to `scripts/config.toml` for `--submods`:
+6. **(optional) Enable version-gated uploads**: Set `upload_only_on_version_change = true` in `scripts/config.toml`.
+   * The last successful uploaded versions are stored in `scripts/dependencies/.upload_versions.json` (created automatically on first use).
+   * Main mod uses `.metadata/metadata.json` `version`; each submod uses `submods/<name>/.metadata/metadata.json` `version`.
+7. **(optional) Configure dev uploads**: Set `workshop_upload_item_id_dev` (or `0` for first-time creation) and `workshop_dev_name` in `scripts/config.toml` for `--dev`.
+8. **(optional) Configure submods**: Add `[[submods]]` entries to `scripts/config.toml` for `--submods`:
    ```toml
    [[submods]]
    mod_id = "my_submod_1"
@@ -108,7 +112,7 @@ To use the script:
    workshop_id = 0
    ```
    Any submod found in `submods/` without a matching `mod_id` entry will be uploaded as a new Workshop item and written back to the config.
-8. **Run `upload.py`**: When ready to run uploads using your configured default targets (Steam must be running):
+9. **Run `upload.py`**: When ready to run uploads using your configured default targets (Steam must be running):
    ```bash
    python scripts/upload.py
    ```
@@ -118,29 +122,29 @@ To use the script:
    * The `in_game/`, `main_menu/` and any other files specified in the `SOURCES` list of `scripts/upload.py`.
    * Uploads that release folder to the Workshop item specified in `scripts/config.toml`.
    If workshop-page upload is enabled, it also uploads title/description updates from workshop source/translation files.
-9. **(optional) Run a dev upload**:
+10. **(optional) Run a dev upload**:
    ```bash
    python scripts/upload.py --dev
    ```
    This will create a new folder `../mod-name-dev` and upload it using the dev Workshop item id, keeping the dev mod id and dev thumbnail.
-10. **(optional) Upload only mod files**:
+11. **(optional) Upload only mod files**:
    ```bash
    python scripts/upload.py --mod
    ```
-11. **(optional) Upload only workshop pages**:
+12. **(optional) Upload only workshop pages**:
    ```bash
    python scripts/upload.py --workshop-pages
    ```
-12. **(optional) Upload both explicitly (ignoring config defaults)**:
+13. **(optional) Upload both explicitly (ignoring config defaults)**:
    ```bash
    python scripts/upload.py --mod --workshop-pages
    ```
-13. **(optional) Upload submods**:
+14. **(optional) Upload submods**:
    ```bash
    python scripts/upload.py --submods
    ```
    This uploads every submod in `submods/` using its metadata `id` and `name`, creating Workshop items as needed.
-14. **(optional) Enable submod uploads by default**:
+15. **(optional) Enable submod uploads by default**:
    * Set `upload_submods_by_default = true` in `scripts/config.toml`.
    * Then `python scripts/upload.py` will include submod uploads without needing `--submods`.
 

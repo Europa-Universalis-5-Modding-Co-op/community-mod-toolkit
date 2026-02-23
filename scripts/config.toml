@@ -12,6 +12,7 @@ workshop_dev_name = "" # Optional: override dev mod name for upload.py --dev
 upload_mod_by_default = true # Should running upload.py upload the mod? You can also use --mod instead.
 upload_workshop_pages_by_default = true # Should running upload.py upload the mod's Workshop pages? You can also use --workshop-pages instead.
 upload_submods_by_default = false # Should running upload.py upload all submods from submods/? You can also use --submods instead.
+upload_only_on_version_change = false # If true, mod/submod uploads only run when metadata.json version changed since last successful upload.
 
 # Optional submod upload mapping (used with upload.py --submods)
 # [[submods]]
