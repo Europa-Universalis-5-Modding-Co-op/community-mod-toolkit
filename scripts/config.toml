@@ -9,6 +9,8 @@ gemini_title_system_prompt = "You are a professional Steam mod title translator.
 workshop_upload_item_id = 3660067991 # Replace with your mod's Workshop item ID (0 creates a new item)
 workshop_upload_item_id_dev = 0 # Optional: dev Workshop item ID for upload-mod.py --dev (0 creates a new item)
 workshop_dev_name = "" # Optional: override dev mod name for upload-mod.py --dev
+upload_mod_by_default = true # Should running upload-mod.py upload the mod? You can also use --mod instead.
+upload_workshop_pages_by_default = true # Should running upload-mod.py upload the mod's Workshop pages? You can also use --no-workshop-pages instead.
 
 # Optional submod upload mapping (used with upload-mod.py --submods)
 # [[submods]]

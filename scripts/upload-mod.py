@@ -29,6 +29,9 @@ SOURCES = [
 # --- Path Setup ---
 ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.toml")
+METADATA_PATH = os.path.join(ROOT_DIR, ".metadata", "metadata.json")
+WORKSHOP_DESCRIPTION_PATH = os.path.join(ROOT_DIR, "assets", "workshop", "workshop-description.bbcode")
+TRANSLATIONS_DIR = os.path.join(ROOT_DIR, "assets", "workshop", "translations")
 APP_ID = 3450310
 CREATE_ITEM_TIMEOUT_SECONDS = 30
 CREATE_ITEM_POLL_INTERVAL_SECONDS = 0.1
@@ -37,6 +40,28 @@ CLEANUP_RETRY_DELAY_SECONDS = 3
 CLEANUP_MAX_ATTEMPTS = 20
 WORKSHOP_FILE_TYPE = EWorkshopFileType.COMMUNITY
 SUBMODS_DIR_NAME = "submods"
+WORKSHOP_TRANSLATION_FILENAME_RE = re.compile(r"^workshop_(.+)\.txt$")
+WORKSHOP_TITLE_MARKER = "===WORKSHOP_TITLE==="
+WORKSHOP_DESCRIPTION_MARKER = "===WORKSHOP_DESCRIPTION==="
+WORKSHOP_NO_TRANSLATE_BELOW = "--NO-TRANSLATE-BELOW--"
+WORKSHOP_ITEM_ID_TOKEN = "$item-id$"
+MAX_DESCRIPTION_LENGTH = 8000
+UPLOAD_MOD_DEFAULT_KEY = "upload_mod_by_default"
+UPLOAD_WORKSHOP_PAGES_DEFAULT_KEY = "upload_workshop_pages_by_default"
+
+LANGUAGE_TO_STEAM = {
+    "english": "english",
+    "french": "french",
+    "german": "german",
+    "spanish": "spanish",
+    "polish": "polish",
+    "russian": "russian",
+    "simp_chinese": "schinese",
+    "turkish": "turkish",
+    "braz_por": "brazilian",
+    "japanese": "japanese",
+    "korean": "koreana",
+}
 
 def _on_rm_error(func, path, exc_info):
     exc = exc_info[1]
@@ -91,6 +116,49 @@ def load_dev_name(config):
         return None
     dev_name = str(dev_name).strip()
     return dev_name if dev_name else None
+
+def load_source_language(config):
+    """Load and validate source_language used for workshop page uploads."""
+    source_language = config.get("source_language")
+    if source_language is None:
+        print("Error: source_language not set in config.toml.")
+        return None
+
+    source_language = str(source_language).strip().lower()
+    if source_language not in LANGUAGE_TO_STEAM:
+        valid = ", ".join(sorted(LANGUAGE_TO_STEAM.keys()))
+        print(f"Error: Unsupported source_language '{source_language}'.")
+        print(f"Supported values: {valid}")
+        return None
+
+    return source_language
+
+def load_required_bool(config, key):
+    """Load a required boolean config setting."""
+    value = config.get(key)
+    if value is None:
+        print(f"Error: {key} not set in config.toml.")
+        return None
+    if not isinstance(value, bool):
+        print(f"Error: {key} must be true or false in config.toml.")
+        return None
+    return value
+
+def resolve_upload_targets(args, config):
+    """Resolve whether to upload mod files and/or workshop pages."""
+    if args.mod or args.workshop_pages:
+        # CLI target flags always override config defaults.
+        return args.mod, args.workshop_pages
+
+    upload_mod = load_required_bool(config, UPLOAD_MOD_DEFAULT_KEY)
+    if upload_mod is None:
+        return None, None
+
+    upload_workshop_pages = load_required_bool(config, UPLOAD_WORKSHOP_PAGES_DEFAULT_KEY)
+    if upload_workshop_pages is None:
+        return None, None
+
+    return upload_mod, upload_workshop_pages
 
 def _replace_value_preserve_comment(line, key, value):
     pattern = re.compile(rf"^(\s*{re.escape(key)}\s*=\s*)([^#]*?)(\s*)(#.*)?$")
@@ -575,8 +643,224 @@ def upload_release(workshop, content_dir, preview_path, item_id, workshop_title=
     print("Workshop update submitted. Check Steam client for upload progress.")
     return True
 
+def read_text(path):
+    """Read a UTF-8 text file, returning None on missing/failed reads."""
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        print(f"Warning: Failed to read '{path}': {e}")
+        return None
+
+def load_workshop_source_title(dev_mode=False, dev_name=None):
+    """Load workshop title from metadata, applying dev/release naming rules."""
+    try:
+        with open(METADATA_PATH, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"Warning: Metadata file not found: {METADATA_PATH}")
+        return None
+    except Exception as e:
+        print(f"Warning: Failed to read metadata file '{METADATA_PATH}': {e}")
+        return None
+
+    raw_title = data.get("name")
+    if raw_title is None:
+        print(f"Warning: Metadata 'name' not found in {METADATA_PATH}")
+        return None
+
+    raw_title = str(raw_title).strip()
+    if not raw_title:
+        print(f"Warning: Metadata 'name' is blank in {METADATA_PATH}")
+        return None
+
+    if dev_mode:
+        if dev_name:
+            return str(dev_name).strip()
+        return raw_title
+
+    return _normalize_release_title(raw_title)
+
+def parse_workshop_translation(text):
+    """Extract title/description sections from a combined workshop translation file."""
+    title = None
+    description = None
+    current = None
+    buffer = []
+
+    def flush():
+        nonlocal title, description, buffer, current
+        content = "".join(buffer)
+        if current == "title":
+            cleaned = content.strip()
+            title = cleaned if cleaned else None
+        elif current == "description":
+            description = content
+        buffer = []
+
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped == WORKSHOP_TITLE_MARKER:
+            flush()
+            current = "title"
+            continue
+        if stripped == WORKSHOP_DESCRIPTION_MARKER:
+            flush()
+            current = "description"
+            continue
+        if current:
+            buffer.append(line)
+
+    flush()
+    return title, description
+
+def split_workshop_description(text):
+    """Remove the no-translate marker line while keeping remaining source text."""
+    if text is None:
+        return None
+
+    lines = text.splitlines(keepends=True)
+    for idx, line in enumerate(lines):
+        if line.strip() == WORKSHOP_NO_TRANSLATE_BELOW:
+            return "".join(lines[:idx] + lines[idx + 1:])
+    return text
+
+def apply_workshop_item_id(text, item_id):
+    """Replace the $item-id$ token when an item id is available."""
+    if text is None or item_id is None:
+        return text
+    return text.replace(WORKSHOP_ITEM_ID_TOKEN, str(item_id))
+
+def trim_description(text, lang_label):
+    """Truncate the description to MAX_DESCRIPTION_LENGTH bytes and warn if truncated."""
+    if not text:
+        return text
+
+    encoded = text.encode("utf-8")
+    if len(encoded) > MAX_DESCRIPTION_LENGTH:
+        print(f"Warning: Description for '{lang_label}' exceeds {MAX_DESCRIPTION_LENGTH} bytes. Truncating.")
+        return encoded[:MAX_DESCRIPTION_LENGTH].decode("utf-8", errors="ignore")
+    return text
+
+def build_workshop_page_updates(config, item_id, dev_mode=False, dev_name=None):
+    """Collect source and translated workshop title/description payloads."""
+    source_language = load_source_language(config)
+    if source_language is None:
+        return None
+
+    base_description = read_text(WORKSHOP_DESCRIPTION_PATH)
+    if base_description is None:
+        print(f"Error: Workshop description file not found: {WORKSHOP_DESCRIPTION_PATH}")
+        return None
+
+    base_description = split_workshop_description(base_description)
+    base_description = apply_workshop_item_id(base_description, item_id)
+    base_description = trim_description(base_description, source_language)
+    base_title = load_workshop_source_title(dev_mode=dev_mode, dev_name=dev_name)
+
+    updates = [{
+        "lang": source_language,
+        "steam_lang": LANGUAGE_TO_STEAM[source_language],
+        "title": base_title,
+        "description": base_description,
+    }]
+
+    if not os.path.exists(TRANSLATIONS_DIR):
+        print(f"Warning: Translations folder not found: {TRANSLATIONS_DIR}")
+        return updates
+
+    translations = {}
+    for filename in os.listdir(TRANSLATIONS_DIR):
+        match = WORKSHOP_TRANSLATION_FILENAME_RE.match(filename)
+        if not match:
+            continue
+        lang = match.group(1)
+        path = os.path.join(TRANSLATIONS_DIR, filename)
+        text = read_text(path)
+        if text is None:
+            continue
+
+        title_text, desc_text = parse_workshop_translation(text)
+        title_text = apply_workshop_item_id(title_text, item_id)
+        desc_text = apply_workshop_item_id(desc_text, item_id)
+        if title_text is None and desc_text is None:
+            continue
+
+        desc_text = trim_description(desc_text, lang)
+        translations[lang] = {"title": title_text, "description": desc_text}
+
+    for lang, entry in translations.items():
+        if lang == source_language:
+            continue
+        if lang not in LANGUAGE_TO_STEAM:
+            print(f"Warning: No Steam language mapping for '{lang}', skipping.")
+            continue
+        updates.append({
+            "lang": lang,
+            "steam_lang": LANGUAGE_TO_STEAM[lang],
+            "title": entry["title"],
+            "description": entry["description"],
+        })
+
+    return updates
+
+def upload_workshop_pages_for_item(steam, updates, item_id):
+    """Upload workshop title/description updates for each language entry."""
+    if updates is None:
+        return False
+
+    print("Workshop language updates:")
+    for update in updates:
+        print(
+            f"  - {update['lang']} ({update['steam_lang']}): "
+            f"{'title' if update['title'] is not None else 'no-title'}, "
+            f"{'description' if update['description'] is not None else 'no-description'}"
+        )
+
+    workshop = steam.Workshop
+    for update in updates:
+        handle = workshop.StartItemUpdate(APP_ID, item_id)
+        if not handle:
+            print("Error: StartItemUpdate failed. Check app ID and item ID.")
+            return False
+
+        lang_label = f"{update['lang']} ({update['steam_lang']})"
+        lang_result = steam.Workshop_SetItemUpdateLanguage(handle, update["steam_lang"].encode())
+        if lang_result is False:
+            print(f"Error: SetItemUpdateLanguage failed for {lang_label}.")
+            return False
+
+        if update["title"] is not None:
+            title_result = workshop.SetItemTitle(handle, update["title"])
+            if title_result is False:
+                print(f"Error: SetItemTitle failed for {lang_label}.")
+                return False
+
+        if update["description"] is not None:
+            desc_result = workshop.SetItemDescription(handle, update["description"])
+            if desc_result is False:
+                print(f"Error: SetItemDescription failed for {lang_label}.")
+                return False
+
+        workshop.SubmitItemUpdate(handle, "")
+
+    print("Workshop page updates submitted. Check Steam client for upload progress.")
+    return True
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Build and upload an EU5 mod to Steam Workshop.")
+    parser.add_argument(
+        "--mod",
+        action="store_true",
+        help="Upload mod content only. When set, config default target settings are ignored."
+    )
+    parser.add_argument(
+        "--workshop-pages",
+        action="store_true",
+        help="Upload Workshop title/description pages only. When set, config default target settings are ignored."
+    )
     parser.add_argument(
         "--dev",
         action="store_true",
@@ -595,6 +879,17 @@ def main():
     if config is None:
         return 1
 
+    upload_mod, upload_workshop_pages = resolve_upload_targets(args, config)
+    if upload_mod is None:
+        return 1
+
+    if not upload_mod and not upload_workshop_pages:
+        print(
+            "No upload actions selected. "
+            "Enable defaults in config.toml or pass --mod and/or --workshop-pages."
+        )
+        return 0
+
     item_id_key = "workshop_upload_item_id_dev" if args.dev else "workshop_upload_item_id"
     item_label = "dev item id" if args.dev else "item id"
     item_id = load_workshop_item_id(config, item_id_key, item_label)
@@ -602,7 +897,11 @@ def main():
         return 1
 
     dev_name = load_dev_name(config) if args.dev else None
-    release_dir, preview_path, workshop_title = build_release(dev_mode=args.dev, dev_name=dev_name)
+    release_dir = None
+    preview_path = None
+    workshop_title = None
+    if upload_mod:
+        release_dir, preview_path, workshop_title = build_release(dev_mode=args.dev, dev_name=dev_name)
 
     uploaded_main = False
 
@@ -610,12 +909,28 @@ def main():
         item_id = ensure_item_id(steam, item_id, CONFIG_PATH, item_id_key)
         if item_id is None:
             return 1
-        if not upload_release(steam.Workshop, release_dir, preview_path, item_id, workshop_title):
-            return 1
-        uploaded_main = True
-        if args.submods:
-            if not upload_submods(steam, config):
+
+        if upload_mod:
+            if not upload_release(steam.Workshop, release_dir, preview_path, item_id, workshop_title):
                 return 1
+            uploaded_main = True
+            if args.submods and not upload_submods(steam, config):
+                return 1
+        elif args.submods:
+            print("Warning: --submods ignored because mod upload is not selected.")
+
+        if upload_workshop_pages:
+            updates = build_workshop_page_updates(
+                config,
+                item_id,
+                dev_mode=args.dev,
+                dev_name=dev_name
+            )
+            if updates is None:
+                return 1
+            if not upload_workshop_pages_for_item(steam, updates, item_id):
+                return 1
+
     if uploaded_main:
         if POST_UPLOAD_DELAY_SECONDS > 0:
             time.sleep(POST_UPLOAD_DELAY_SECONDS)
