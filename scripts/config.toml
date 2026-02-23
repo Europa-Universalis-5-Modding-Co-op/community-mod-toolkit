@@ -14,7 +14,7 @@ workshop_upload_item_id = 3660067991 # Replace with your mod's Workshop item ID 
 workshop_upload_item_id_dev = 0 # Optional: dev Workshop item ID for upload.py --dev (0 creates a new item)
 upload_mod_by_default = true # Should running upload.py upload the mod? You can also use --mod instead.
 upload_workshop_pages_by_default = true # Should running upload.py upload the mod's Workshop pages? You can also use --workshop-pages instead.
-upload_only_on_version_change = false # If true, mod/submod uploads only run when metadata.json version changed since last successful upload.
+upload_only_on_version_change = false # If true, mod/submod uploads only run when the metadata.json version changed since the last successful upload.
 upload_submods_by_default = false # Should running upload.py upload all submods from submods/? You can also use --submods instead.
 workshop_dev_name = "" # Optional: override dev mod name for upload.py --dev
 
