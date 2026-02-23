@@ -81,8 +81,8 @@ Builds a minimal release folder and uploads to Steam Workshop, and can also uplo
 * Makes it easy to swap between for joining multiplayer sessions.
 * Can more easily swap to the released version to verify reported issues.
 * Pushes the release version straight to Steam Workshop using the item id from `scripts/config.toml`.
-* By default, uploads are controlled by `upload_mod_by_default` and `upload_workshop_pages_by_default` in `scripts/config.toml`.
-* Use `--mod` and/or `--workshop-pages` to override config defaults for that run.
+* By default, uploads are controlled by `upload_mod_by_default`, `upload_workshop_pages_by_default`, and `upload_submods_by_default` in `scripts/config.toml`.
+* Use `--mod`, `--workshop-pages`, and/or `--submods` to override config defaults for that run.
 * Use `--dev` to target the dev Workshop item with the dev thumbnail and name.
 * If the configured Workshop item id is `0`, the script will create a new item and write the id back to `scripts/config.toml`.
 * Use `--submods` to upload submods from `submods/` using the `[[submods]]` mapping in `scripts/config.toml`.
@@ -95,7 +95,7 @@ To use the script:
 3. **(optionally) Configure Included Files**: By default, the release version only includes the `.metadata/`, `in_game/` and `main_menu/` folders.
    * If you want to include more files (i.e., LICENSE), you can add them to the `SOURCES` list in `scripts/upload.py`.
 4. **Set the Workshop item ID**: Update `workshop_upload_item_id` in `scripts/config.toml`, or set it to `0` to create a new item on first upload.
-5. **Set default upload targets**: Configure `upload_mod_by_default` and `upload_workshop_pages_by_default` in `scripts/config.toml`.
+5. **Set default upload targets**: Configure `upload_mod_by_default`, `upload_workshop_pages_by_default`, and `upload_submods_by_default` in `scripts/config.toml`.
 6. **(optional) Configure dev uploads**: Set `workshop_upload_item_id_dev` (or `0` for first-time creation) and `workshop_dev_name` in `scripts/config.toml` for `--dev`.
 7. **(optional) Configure submods**: Add `[[submods]]` entries to `scripts/config.toml` for `--submods`:
    ```toml
@@ -140,6 +140,9 @@ To use the script:
    python scripts/upload.py --submods
    ```
    This uploads every submod in `submods/` using its metadata `id` and `name`, creating Workshop items as needed.
+14. **(optional) Enable submod uploads by default**:
+   * Set `upload_submods_by_default = true` in `scripts/config.toml`.
+   * Then `python scripts/upload.py` will include submod uploads without needing `--submods`.
 
 ### translate.py
 Auto-translates localization files using DeepL or Gemini-3-Flash, and can optionally translate Steam Workshop titles/descriptions using DeepL or Gemini-3-Flash.

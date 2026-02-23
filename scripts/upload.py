@@ -48,6 +48,7 @@ WORKSHOP_ITEM_ID_TOKEN = "$item-id$"
 MAX_DESCRIPTION_LENGTH = 8000
 UPLOAD_MOD_DEFAULT_KEY = "upload_mod_by_default"
 UPLOAD_WORKSHOP_PAGES_DEFAULT_KEY = "upload_workshop_pages_by_default"
+UPLOAD_SUBMODS_DEFAULT_KEY = "upload_submods_by_default"
 
 LANGUAGE_TO_STEAM = {
     "english": "english",
@@ -144,21 +145,35 @@ def load_required_bool(config, key):
         return None
     return value
 
+def load_optional_bool(config, key, default):
+    """Load an optional boolean config setting."""
+    if key not in config:
+        return default
+    value = config.get(key)
+    if not isinstance(value, bool):
+        print(f"Error: {key} must be true or false in config.toml.")
+        return None
+    return value
+
 def resolve_upload_targets(args, config):
-    """Resolve whether to upload mod files and/or workshop pages."""
-    if args.mod or args.workshop_pages:
-        # CLI target flags always override config defaults.
-        return args.mod, args.workshop_pages
+    """Resolve whether to upload mod, workshop pages, and submods."""
+    if args.mod or args.workshop_pages or args.submods:
+        # CLI target flags override config defaults for this run.
+        return args.mod, args.workshop_pages, args.submods
 
     upload_mod = load_required_bool(config, UPLOAD_MOD_DEFAULT_KEY)
     if upload_mod is None:
-        return None, None
+        return None, None, None
 
     upload_workshop_pages = load_required_bool(config, UPLOAD_WORKSHOP_PAGES_DEFAULT_KEY)
     if upload_workshop_pages is None:
-        return None, None
+        return None, None, None
 
-    return upload_mod, upload_workshop_pages
+    upload_submods = load_optional_bool(config, UPLOAD_SUBMODS_DEFAULT_KEY, False)
+    if upload_submods is None:
+        return None, None, None
+
+    return upload_mod, upload_workshop_pages, upload_submods
 
 def _replace_value_preserve_comment(line, key, value):
     pattern = re.compile(rf"^(\s*{re.escape(key)}\s*=\s*)([^#]*?)(\s*)(#.*)?$")
@@ -879,24 +894,27 @@ def main():
     if config is None:
         return 1
 
-    upload_mod, upload_workshop_pages = resolve_upload_targets(args, config)
+    upload_mod, upload_workshop_pages, upload_submods_selected = resolve_upload_targets(args, config)
     if upload_mod is None:
         return 1
 
-    if not upload_mod and not upload_workshop_pages:
+    if not upload_mod and not upload_workshop_pages and not upload_submods_selected:
         print(
             "No upload actions selected. "
-            "Enable defaults in config.toml or pass --mod and/or --workshop-pages."
+            "Enable defaults in config.toml or pass --mod/--workshop-pages/--submods."
         )
         return 0
 
     item_id_key = "workshop_upload_item_id_dev" if args.dev else "workshop_upload_item_id"
     item_label = "dev item id" if args.dev else "item id"
-    item_id = load_workshop_item_id(config, item_id_key, item_label)
-    if item_id is None:
-        return 1
-
+    item_id = None
     dev_name = load_dev_name(config) if args.dev else None
+
+    if upload_mod or upload_workshop_pages:
+        item_id = load_workshop_item_id(config, item_id_key, item_label)
+        if item_id is None:
+            return 1
+
     release_dir = None
     preview_path = None
     workshop_title = None
@@ -906,18 +924,19 @@ def main():
     uploaded_main = False
 
     with steamworks_session() as steam:
-        item_id = ensure_item_id(steam, item_id, CONFIG_PATH, item_id_key)
-        if item_id is None:
-            return 1
+        if upload_mod or upload_workshop_pages:
+            item_id = ensure_item_id(steam, item_id, CONFIG_PATH, item_id_key)
+            if item_id is None:
+                return 1
 
         if upload_mod:
             if not upload_release(steam.Workshop, release_dir, preview_path, item_id, workshop_title):
                 return 1
             uploaded_main = True
-            if args.submods and not upload_submods(steam, config):
+
+        if upload_submods_selected:
+            if not upload_submods(steam, config):
                 return 1
-        elif args.submods:
-            print("Warning: --submods ignored because mod upload is not selected.")
 
         if upload_workshop_pages:
             updates = build_workshop_page_updates(
