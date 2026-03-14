@@ -147,22 +147,7 @@ else:
 run_git(["remote", "set-url", "--push", REMOTE_NAME, "no_push"])
 run_git(["fetch", REMOTE_NAME])
 
-# 3. Interactive Prompt
-print("\n--- Conflict Resolution Strategy ---")
-print("  [y] Yes (Default): Overwrite local files with template versions.")
-print("      Overwrites will be STAGED but NOT commited so you can review and revert any unwanted changes.")
-print("  [n] No: Keep your local files. Only adds new template files (no overwrites).")
-
-while True:
-    choice = input("\nOverwrite local files with template? [y/n]: ").strip().lower()
-    if choice in ["", "y", "yes"]:
-        overwrite = True
-        break
-    elif choice in ["n", "no"]:
-        overwrite = False
-        break
-
-# 4. Link the repo's history (safe merge).
+# 3. Link the repo's history (safe merge).
 print(f"\nLinking toolkit history...")
 
 run_git([
@@ -189,31 +174,27 @@ else:
 # Collect final status messages to print at the end so pip output doesn't trail them.
 final_messages = []
 
-# 5. Overwrite local files but don't commit.
-if overwrite:
-    print("Applying template files...")
+# 4. Apply toolkit files (staged but not committed for review).
+print("Applying toolkit files...")
 
-    # Forcefully checkout the release files from the remote.
-    run_git(["checkout", f"{REMOTE_NAME}/{REMOTE_BRANCH}", "--", "."])
+# Forcefully checkout the release files from the remote.
+run_git(["checkout", f"{REMOTE_NAME}/{REMOTE_BRANCH}", "--", "."])
 
-    # --- CLEANUP STEP 2: Remove temporary files from the overwrite stage ---
-    # Remove them again because 'checkout' brought them back from the remote
-    run_git(["rm", "-f", "--ignore-unmatch", "tools/setup.py"], check=False)
-    run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=False)
+# --- CLEANUP STEP 2: Remove temporary files from the overwrite stage ---
+# Remove them again because 'checkout' brought them back from the remote
+run_git(["rm", "-f", "--ignore-unmatch", "tools/setup.py"], check=False)
+run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=False)
 
-    final_messages.append("--- Toolkit Linked Successfully ---")
-    final_messages.append("If there were any conflicts, they will now appear as uncommited changes for review.")
+final_messages.append("--- Toolkit Linked Successfully ---")
+final_messages.append("Changes are STAGED but NOT committed. Review them before committing.")
 
-else:
-    final_messages.append("Success! Toolkit linked (local files preserved).")
-
-# 6. Merge .env-template into .env
+# 5. Merge .env-template into .env
 merge_env_template(
     os.path.join(ROOT_DIR, ".env-template"),
     os.path.join(ROOT_DIR, ".env")
 )
 
-# 7. Install Python dependencies
+# 6. Install Python dependencies
 requirements_path = os.path.join(ROOT_DIR, "tools", "dependencies", "requirements.txt")
 legacy_requirements_path = os.path.join(ROOT_DIR, "tools", "requirements.txt")
 if os.path.exists(requirements_path):
@@ -225,11 +206,11 @@ elif os.path.exists(legacy_requirements_path):
 else:
     print("Warning: requirements.txt not found. Skipping dependency install.")
 
-# 8. Final status message (printed last).
+# 7. Final status message (printed last).
 if final_messages:
     print("\n" + "\n".join(final_messages))
 
-# 9. Self-Destruct
+# 8. Self-Destruct
 try:
     os.remove(SCRIPT_FILE)
 except Exception:
