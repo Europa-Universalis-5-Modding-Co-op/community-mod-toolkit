@@ -53,9 +53,10 @@ By having the toolkit as a remote, you can easily update the toolkit by merging 
 1. **Push your mod to a Git repository**:
    * **Existing Mods**: If you haven't already, push your mod to a Git repository.
    * **New Mods**: Create, initialize, and push, a new empty Git repo in the Europa Universalis V/mod folder.
-2. a) From the root of your mod folder, run:
+2. From the root of your mod folder, run:
    ```bash
-   curl -sL https://raw.githubusercontent.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/toolkit-release/tools/setup.py -o setup.py && python setup.py
+   curl.exe -sL https://raw.githubusercontent.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/toolkit-release/tools/setup.py -o setup.py
+   python setup.py
    ```
    *Note: The script will not overwrite any existing files and can be run on existing repositories safely.*
 
