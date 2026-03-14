@@ -1,17 +1,19 @@
-# EU5 Mod Devkit
+# Community Mod Toolkit
 
-A development kit for Europa Universalis V (EU5) including a template and tools for creating mods.
+A community-driven toolkit for Europa Universalis V (EU5) modding. It provides a mod template and a set of integrated tools for automating common tasks like Steam Workshop uploads and localization translation.
+
+The tools are designed to work together, sharing a common configuration (`tools/config.toml`) and project structure, so you can set up once and use any combination of them.
 
 ## Requirements
 
 - **Python 3.x**: Required for running the setup and release scripts.
-- **Git**: Required for version control and using the devkit tools.
-- **Europa Universalis V**: The game this devkit is designed for.
+- **Git**: Required for version control and using the toolkit.
+- **Europa Universalis V**: The game this toolkit is designed for.
 
 ## Project Structure
 
 ```text
-eu5-mod-devkit/
+community-mod-toolkit/
 ├── .metadata/                  # Mod metadata and thumbnails
 │   ├── metadata.json            # Mod configuration (name, id, tags, etc.)
 │   ├── thumbnail.png            # Default/Dev thumbnail template
@@ -25,8 +27,8 @@ eu5-mod-devkit/
 │   ├── setup.py                 # Initial project setup script
 │   ├── upload.py            # Build a minimal release folder and upload it to Steam Workshop
 │   ├── translate.py             # Auto-translate localization files with DeepL or Gemini
-│   ├── create-devkit-release.sh # (Internal) Devkit release management
-│   └── reset-release.sh         # (Internal) Devkit release management
+│   ├── create-release.sh        # (Internal) Toolkit release management
+│   └── reset-release.sh         # (Internal) Toolkit release management
 ├── in_game/common/dummy.txt    # stub file to create the folder
 ├── main_menu/
 │   └── localization
@@ -38,37 +40,37 @@ eu5-mod-devkit/
 ├── .env-template               # For setting the DeepL & Gemini api keys
 ├── LICENSE                     # (Internal) Project license
 ├── README.md                   # (Internal) This file
-└── README-TEMPLATE.md          # GitHub repo readme template, will be copied to README.md in the release branch.
+└── README-TEMPLATE.md          # GitHub repo readme template, will be copied to README.md in the toolkit-release branch.
 ```
-* Files marked as `(internal)` are not included in the release version, and are just for the devkit's own use. You do not need to copy them, and they will not be included if you run the setup script.
+* Files marked as `(internal)` are not included in the release version, and are just for the toolkit's own use. You do not need to copy them, and they will not be included if you run the setup script.
 
 ## Setup
 
 ### setup.py
-This will copy all files from the `release` branch into your mod folder, and add the devkit repository as a remote.
-By having the devkit as a remote, you can easily update the devkit by merging from the remote `tools/devkit` branch.
+This will copy all files from the `toolkit-release` branch into your mod folder, and add the toolkit repository as a remote.
+By having the toolkit as a remote, you can easily update the toolkit by merging from the remote `toolkit-release` branch.
 
 1. **Push your mod to a Git repository**:
    * **Existing Mods**: If you haven't already, push your mod to a Git repository.
    * **New Mods**: Create, initialize, and push, a new empty Git repo in the Europa Universalis V/mod folder.
 2. a) From the root of your mod folder, run:
    ```bash
-   curl -sL https://raw.githubusercontent.com/conner-olsen/eu5-mod-devkit/devkit-release/tools/setup.py -o setup.py && python setup.py
+   curl -sL https://raw.githubusercontent.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/toolkit-release/tools/setup.py -o setup.py && python setup.py
    ```
    *Note: The script will not overwrite any existing files and can be run on existing repositories safely.*
 
 After running, the setup script will delete itself and should not need to be used again.
 
-Once the devkit files are in place, install the Python dependencies:
+Once the toolkit files are in place, install the Python dependencies:
 
 ### Manual Setup
-1. Copy any files you want to use from the `release` branch into your mod folder.
+1. Copy any files you want to use from the `toolkit-release` branch into your mod folder.
 2. Install the Python dependencies:
 ```bash
 pip install -r tools/dependencies/requirements.txt
 ```
 
-Note that without the devkit remote, you will have to manually check and copy over updates to the devkit.
+Note that without the toolkit remote, you will have to manually check and copy over updates to the toolkit.
 
 If you are familiar with Git, you can also manually add the remote for ease of updating.
 
@@ -239,6 +241,21 @@ For each submod `submods/<submod_name>`:
 * Gemini's free tier allows 20 requests per day, which allows 2x workshop descriptions, or 1x title+description per day. Localization translation uses far more requests and will exceed the free tier quickly.
 * Machine translation is imperfect; expect occasional mistakes.
 * Gemini generally seems to perform better than DeepL for the workshop page translations but has lower limits.
+
+## Contributing
+
+Contributions are welcome! This is a community toolkit and anyone can add new tools, improve existing ones, or fix bugs.
+
+### Adding a New Tool
+1. Add your script to the `tools/` folder.
+2. Document it in this README under **Provided Tools** following the existing format.
+3. If your tool has additional Python dependencies, add them to `tools/dependencies/requirements.txt`.
+4. Submit a pull request with a clear description of what your tool does and how to use it.
+
+### General Guidelines
+* Follow the existing code style and patterns (e.g., using `tools/config.toml` for user configuration).
+* Ensure your tool works from the mod root directory.
+* Test with both new and existing mod setups before submitting.
 
 ## Credits
 

@@ -1,9 +1,9 @@
 import os, subprocess, sys, shutil
 
 # --- Configuration ---
-DEVKIT_URL = "https://github.com/conner-olsen/eu5-mod-devkit.git"
-REMOTE_NAME = "devkit"
-REMOTE_BRANCH = "devkit-release"
+DEVKIT_URL = "https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit.git"
+REMOTE_NAME = "toolkit"
+REMOTE_BRANCH = "toolkit-release"
 
 # --- Path Setup ---
 SCRIPT_FILE = os.path.abspath(__file__)
@@ -163,7 +163,7 @@ while True:
         break
 
 # 4. Link the repo's history (safe merge).
-print(f"\nLinking devkit history...")
+print(f"\nLinking toolkit history...")
 
 run_git([
     "merge",
@@ -182,9 +182,9 @@ if has_merge_head():
     run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=False)
 
     # Finalize the commit.
-    run_git(["commit", "-m", "Link devkit history"])
+    run_git(["commit", "-m", "Link toolkit history"])
 else:
-    print("Devkit history already linked. Skipping history merge commit.")
+    print("Toolkit history already linked. Skipping history merge commit.")
 
 # Collect final status messages to print at the end so pip output doesn't trail them.
 final_messages = []
@@ -201,11 +201,11 @@ if overwrite:
     run_git(["rm", "-f", "--ignore-unmatch", "tools/setup.py"], check=False)
     run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=False)
 
-    final_messages.append("--- Devkit Linked Successfully ---")
+    final_messages.append("--- Toolkit Linked Successfully ---")
     final_messages.append("If there were any conflicts, they will now appear as uncommited changes for review.")
 
 else:
-    final_messages.append("Success! Devkit linked (local files preserved).")
+    final_messages.append("Success! Toolkit linked (local files preserved).")
 
 # 6. Merge .env-template into .env
 merge_env_template(

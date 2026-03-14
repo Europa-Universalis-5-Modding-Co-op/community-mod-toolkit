@@ -13,11 +13,11 @@
 # git checkout main
 
 # # 3. Delete release branch everywhere
-# git branch -D devkit-release
-# git push origin --delete devkit-release
+# git branch -D toolkit-release
+# git push origin --delete toolkit-release
 
 # # 4. Create fresh Orphan branch
-# git checkout --orphan devkit-release
+# git checkout --orphan toolkit-release
 
 # # 5. Wipe directory
 # git rm -rf .
@@ -27,7 +27,7 @@
 
 # # 7. Remove dev-only files
 # git rm -f README.md
-# git rm -f tools/create-devkit-release.sh
+# git rm -f tools/create-release.sh
 # git rm -f tools/reset-release.sh
 # git rm -f assets/images/mod-id-location.png
 # git mv -f README-TEMPLATE.md README.md
@@ -63,7 +63,7 @@
 
 # # 9. Commit and Push
 # git commit -m "$VERSION"
-# git push origin devkit-release
+# git push origin toolkit-release
 
 # # 10. Return to main
 # git checkout main

@@ -2,14 +2,14 @@
 set -e # Stop the script if any command fails
 
 # --- Configuration ---
-VERSION="Devkit v0.8.2"
+VERSION="Toolkit v0.8.2"
 
 # --- Script ---
 # 1. Navigate to repo root
 cd "$(dirname "$0")/.."
 
 # 2. Switch to release
-git checkout devkit-release
+git checkout toolkit-release
 
 # 3. Wipe current directory
 git rm -rf .
@@ -19,7 +19,7 @@ git checkout main -- .
 
 # 5. Remove dev-only files
 git rm -f README.md
-git rm -f tools/create-devkit-release.sh
+git rm -f tools/create-release.sh
 git rm -f tools/reset-release.sh
 git rm -f assets/images/mod-id-location.png
 git mv -f README-TEMPLATE.md README.md
@@ -55,7 +55,7 @@ git add "$config_path"
 
 # 7. Commit and Push
 git commit -m "$VERSION"
-git push origin devkit-release
+git push origin toolkit-release
 
 # 8. Return to main
 git checkout main
