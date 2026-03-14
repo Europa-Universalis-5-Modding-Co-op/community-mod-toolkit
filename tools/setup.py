@@ -177,7 +177,7 @@ run_git([
 if has_merge_head():
     # --- CLEANUP STEP 1: Remove temporary files from the merge commit ---
     # 1. Remove the setup script so it isn't committed
-    run_git(["rm", "-f", "--ignore-unmatch", "scripts/setup.py"], check=False)
+    run_git(["rm", "-f", "--ignore-unmatch", "tools/setup.py"], check=False)
     # 2. Remove the dummy file so it isn't committed
     run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=False)
 
@@ -198,7 +198,7 @@ if overwrite:
 
     # --- CLEANUP STEP 2: Remove temporary files from the overwrite stage ---
     # Remove them again because 'checkout' brought them back from the remote
-    run_git(["rm", "-f", "--ignore-unmatch", "scripts/setup.py"], check=False)
+    run_git(["rm", "-f", "--ignore-unmatch", "tools/setup.py"], check=False)
     run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=False)
 
     final_messages.append("--- Devkit Linked Successfully ---")
@@ -214,8 +214,8 @@ merge_env_template(
 )
 
 # 7. Install Python dependencies
-requirements_path = os.path.join(ROOT_DIR, "scripts", "dependencies", "requirements.txt")
-legacy_requirements_path = os.path.join(ROOT_DIR, "scripts", "requirements.txt")
+requirements_path = os.path.join(ROOT_DIR, "tools", "dependencies", "requirements.txt")
+legacy_requirements_path = os.path.join(ROOT_DIR, "tools", "requirements.txt")
 if os.path.exists(requirements_path):
     print("\nInstalling Python dependencies...")
     run_pip(["install", "-r", requirements_path])

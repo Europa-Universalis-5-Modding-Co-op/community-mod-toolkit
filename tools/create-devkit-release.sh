@@ -19,13 +19,13 @@ git checkout main -- .
 
 # 5. Remove dev-only files
 git rm -f README.md
-git rm -f scripts/create-devkit-release.sh
-git rm -f scripts/reset-release.sh
+git rm -f tools/create-devkit-release.sh
+git rm -f tools/reset-release.sh
 git rm -f assets/images/mod-id-location.png
 git mv -f README-TEMPLATE.md README.md
 
 # 6. Reset Workshop item ID for release branch
-config_path="scripts/config.toml"
+config_path="tools/config.toml"
 if [[ ! -f "$config_path" ]]; then
   echo "Error: Missing $config_path"
   exit 1
@@ -61,4 +61,4 @@ git push origin devkit-release
 git checkout main
 
 # 9. Discard local config changes on main
-git checkout -- scripts/config.toml
+git checkout -- tools/config.toml

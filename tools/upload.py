@@ -12,7 +12,7 @@ import tomllib
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEPENDENCIES_DIR = os.path.join(SCRIPT_DIR, "dependencies")
-# Allow importing the bundled steamworks module from scripts/dependencies/steamworks.
+# Allow importing the bundled steamworks module from tools/dependencies/steamworks.
 sys.path.insert(0, DEPENDENCIES_DIR)
 
 from steamworks import STEAMWORKS

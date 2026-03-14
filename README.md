@@ -20,7 +20,7 @@ eu5-mod-devkit/
 │   └── images/                  # Images used in the mod
 │       ├── thumbnail.psd          # Photoshop template for the thumbnail
 │       └── thumbnail-alt.psd      # Alternative Photoshop template for the thumbnail
-├── scripts/                    # Automation scripts
+├── tools/                    # Automation scripts
 │   ├── dependencies/           # SteamworksPy DLLs, steam_appid.txt, requirements.txt, and steamworks module
 │   ├── setup.py                 # Initial project setup script
 │   ├── upload.py            # Build a minimal release folder and upload it to Steam Workshop
@@ -53,7 +53,7 @@ By having the devkit as a remote, you can easily update the devkit by merging fr
    * **New Mods**: Create, initialize, and push, a new empty Git repo in the Europa Universalis V/mod folder.
 2. a) From the root of your mod folder, run:
    ```bash
-   curl -sL https://raw.githubusercontent.com/conner-olsen/eu5-mod-devkit/devkit-release/scripts/setup.py -o setup.py && python setup.py
+   curl -sL https://raw.githubusercontent.com/conner-olsen/eu5-mod-devkit/devkit-release/tools/setup.py -o setup.py && python setup.py
    ```
    *Note: The script will not overwrite any existing files and can be run on existing repositories safely.*
 
@@ -65,7 +65,7 @@ Once the devkit files are in place, install the Python dependencies:
 1. Copy any files you want to use from the `release` branch into your mod folder.
 2. Install the Python dependencies:
 ```bash
-pip install -r scripts/dependencies/requirements.txt
+pip install -r tools/dependencies/requirements.txt
 ```
 
 Note that without the devkit remote, you will have to manually check and copy over updates to the devkit.
@@ -80,12 +80,12 @@ Builds a minimal release folder and uploads to Steam Workshop, and can also uplo
 * Separate IDs, names, and (optionally) thumbnails allow you to easily swap between your dev, and workshop versions through the in-game mod manager.
 * Makes it easy to swap between for joining multiplayer sessions.
 * Can more easily swap to the released version to verify reported issues.
-* Pushes the release version straight to Steam Workshop using the item id from `scripts/config.toml`.
-* By default, uploads are controlled by `upload_mod_by_default`, `upload_workshop_pages_by_default`, and `upload_submods_by_default` in `scripts/config.toml`.
+* Pushes the release version straight to Steam Workshop using the item id from `tools/config.toml`.
+* By default, uploads are controlled by `upload_mod_by_default`, `upload_workshop_pages_by_default`, and `upload_submods_by_default` in `tools/config.toml`.
 * Use `--mod`, `--workshop-pages`, and/or `--submods` to override config defaults for that run.
 * Use `--dev` to target the dev Workshop item with the dev thumbnail and name.
-* If the configured Workshop item id is `0`, the script will create a new item and write the id back to `scripts/config.toml`.
-* Use `--submods` to upload submods from `submods/` using the `[[submods]]` mapping in `scripts/config.toml`.
+* If the configured Workshop item id is `0`, the script will create a new item and write the id back to `tools/config.toml`.
+* Use `--submods` to upload submods from `submods/` using the `[[submods]]` mapping in `tools/config.toml`.
 * Optional version gating (`upload_only_on_version_change`) only uploads mod/submods when `metadata.json` `version` changed since the last successful upload.
 
 To use the script:
@@ -94,14 +94,14 @@ To use the script:
    * The dev thumbnail will use `.metadata/thumbnail.png`.
    * Make the release thumbnail `.metadata/thumbnail-release.png` (if it does not exist, the `.metadata/thumbnail.png` will be used for both).
 3. **(optionally) Configure Included Files**: By default, the release version only includes the `.metadata/`, `in_game/` and `main_menu/` folders.
-   * If you want to include more files (i.e., LICENSE), you can add them to the `SOURCES` list in `scripts/upload.py`.
-4. **Set the Workshop item ID**: Update `workshop_upload_item_id` in `scripts/config.toml`, or set it to `0` to create a new item on first upload.
-5. **Set default upload targets**: Configure `upload_mod_by_default`, `upload_workshop_pages_by_default`, and `upload_submods_by_default` in `scripts/config.toml`.
-6. **(optional) Enable version-gated uploads**: Set `upload_only_on_version_change = true` in `scripts/config.toml`.
-   * The last successful uploaded versions are stored in `scripts/dependencies/.upload_versions.json` (created automatically on first use).
+   * If you want to include more files (i.e., LICENSE), you can add them to the `SOURCES` list in `tools/upload.py`.
+4. **Set the Workshop item ID**: Update `workshop_upload_item_id` in `tools/config.toml`, or set it to `0` to create a new item on first upload.
+5. **Set default upload targets**: Configure `upload_mod_by_default`, `upload_workshop_pages_by_default`, and `upload_submods_by_default` in `tools/config.toml`.
+6. **(optional) Enable version-gated uploads**: Set `upload_only_on_version_change = true` in `tools/config.toml`.
+   * The last successful uploaded versions are stored in `tools/dependencies/.upload_versions.json` (created automatically on first use).
    * Main mod uses `.metadata/metadata.json` `version`; each submod uses `submods/<name>/.metadata/metadata.json` `version`.
-7. **(optional) Configure dev uploads**: Set `workshop_upload_item_id_dev` (or `0` for first-time creation) and `workshop_dev_name` in `scripts/config.toml` for `--dev`.
-8. **(optional) Configure submods**: Add `[[submods]]` entries to `scripts/config.toml` for `--submods`:
+7. **(optional) Configure dev uploads**: Set `workshop_upload_item_id_dev` (or `0` for first-time creation) and `workshop_dev_name` in `tools/config.toml` for `--dev`.
+8. **(optional) Configure submods**: Add `[[submods]]` entries to `tools/config.toml` for `--submods`:
    ```toml
    [[submods]]
    mod_id = "my_submod_1"
@@ -114,39 +114,39 @@ To use the script:
    Any submod found in `submods/` without a matching `mod_id` entry will be uploaded as a new Workshop item and written back to the config.
 9. **Run `upload.py`**: When ready to run uploads using your configured default targets (Steam must be running):
    ```bash
-   python scripts/upload.py
+   python tools/upload.py
    ```
    If mod upload is enabled, this will create a new folder `../mod-name-release` with:
    * The metadata.json file from `.metadata/` with " Dev" and ".dev" removed from the name and id respectively.
    * The thumbnail from `.metadata/thumbnail-release.png` or the default thumbnail if it doesn't exist.
-   * The `in_game/`, `main_menu/` and any other files specified in the `SOURCES` list of `scripts/upload.py`.
-   * Uploads that release folder to the Workshop item specified in `scripts/config.toml`.
+   * The `in_game/`, `main_menu/` and any other files specified in the `SOURCES` list of `tools/upload.py`.
+   * Uploads that release folder to the Workshop item specified in `tools/config.toml`.
    If workshop-page upload is enabled, it also uploads title/description updates from workshop source/translation files.
 10. **(optional) Run a dev upload**:
    ```bash
-   python scripts/upload.py --dev
+   python tools/upload.py --dev
    ```
    This will create a new folder `../mod-name-dev` and upload it using the dev Workshop item id, keeping the dev mod id and dev thumbnail.
 11. **(optional) Upload only mod files**:
    ```bash
-   python scripts/upload.py --mod
+   python tools/upload.py --mod
    ```
 12. **(optional) Upload only workshop pages**:
    ```bash
-   python scripts/upload.py --workshop-pages
+   python tools/upload.py --workshop-pages
    ```
 13. **(optional) Upload both explicitly (ignoring config defaults)**:
    ```bash
-   python scripts/upload.py --mod --workshop-pages
+   python tools/upload.py --mod --workshop-pages
    ```
 14. **(optional) Upload submods**:
    ```bash
-   python scripts/upload.py --submods
+   python tools/upload.py --submods
    ```
    This uploads every submod in `submods/` using its metadata `id` and `name`, creating Workshop items as needed.
 15. **(optional) Enable submod uploads by default**:
-   * Set `upload_submods_by_default = true` in `scripts/config.toml`.
-   * Then `python scripts/upload.py` will include submod uploads without needing `--submods`.
+   * Set `upload_submods_by_default = true` in `tools/config.toml`.
+   * Then `python tools/upload.py` will include submod uploads without needing `--submods`.
 
 ### translate.py
 Auto-translates localization files using DeepL or Gemini-3-Flash, and can optionally translate Steam Workshop titles/descriptions using DeepL or Gemini-3-Flash.
@@ -157,7 +157,7 @@ Localization translation and workshop translation are independent, so either sid
 1. Copy `.env-template` to `.env`.
 2. Add your DeepL API key as `DEEPL_API_KEY=your_key_here`.
 3. If you plan to use Gemini for localization or workshop translations, add `GEMINI_API_KEY=your_key_here` to `.env`.
-4. Review and change any settings you want in `scripts/config.toml`
+4. Review and change any settings you want in `tools/config.toml`
    * `source_language` (english, french, german, spanish, polish, russian, simp_chinese, turkish, braz_por, japanese, korean)
    * `localization_translator` (deepl or gemini-3-flash)
    * `gemini_localization_system_prompt`
@@ -171,25 +171,25 @@ Localization translation and workshop translation are independent, so either sid
    * Put your workshop description in `assets/workshop/workshop-description.bbcode`.
    * Your workshop title is pulled from `.metadata/metadata.json` (`name`), with a trailing ` Dev` removed if present.
    * `$item-id$` in the description is replaced with `workshop_upload_item_id` before translating and uploading.
-6. Install the dependencies using `pip install -r scripts/dependencies/requirements.txt` (if you ran the setup script, this is already done)
+6. Install the dependencies using `pip install -r tools/dependencies/requirements.txt` (if you ran the setup script, this is already done)
 
 #### Usage
 ```bash
-python scripts/translate.py
+python tools/translate.py
 ```
 
 To translate the main mod and every submod in `submods/`:
 ```bash
-python scripts/translate.py --submods
+python tools/translate.py --submods
 ```
 
 To include submods by default without passing `--submods`:
-* Set `translate_submods_by_default = true` in `scripts/config.toml`.
-* Then `python scripts/translate.py` will process the main mod and all submods.
+* Set `translate_submods_by_default = true` in `tools/config.toml`.
+* Then `python tools/translate.py` will process the main mod and all submods.
 
 #### Optional Inputs
 Every input part is optional (localization files, workshop metadata, workshop description, and workshop template), and the script processes whatever exists.
-Example: if a submod has only `workshop/workshop-description.bbcode` and no localization folder, `python scripts/translate.py --submods` still translates that workshop description and skips localization for that submod.
+Example: if a submod has only `workshop/workshop-description.bbcode` and no localization folder, `python tools/translate.py --submods` still translates that workshop description and skips localization for that submod.
 
 #### --submods Path Layout
 When `--submods` is used, `translate.py` processes the main mod and each folder under `submods/`.
@@ -207,11 +207,11 @@ For each submod `submods/<submod_name>`:
 * Automatically skips lines that consist purely of tags or formatting characters.
 
 #### Caching and Updates
-* Hashes are stored in `scripts/dependencies/.translate_hashes.json`; delete this file to force re-translation.
+* Hashes are stored in `tools/dependencies/.translate_hashes.json`; delete this file to force re-translation.
 * Localization keys that have not changed since the last translation are skipped.
 * Workshop descriptions are re-translated only when the corresponding `workshop-description.bbcode` changes (main mod or submod), or when the selected provider changes.
 * Workshop titles are generated once and never overwritten (delete the translated title files to force re-translation).
-* To disable an output language, remove its entry from `TARGET_LANGUAGES` in `scripts/translate.py`.
+* To disable an output language, remove its entry from `TARGET_LANGUAGES` in `tools/translate.py`.
 
 #### Localization Tags
 * `# NO-TRANSLATE` skips a single line.
