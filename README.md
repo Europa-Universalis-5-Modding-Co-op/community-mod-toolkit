@@ -24,6 +24,7 @@ community-mod-toolkit/
 │       └── thumbnail-alt.psd      # Alternative Photoshop template for the thumbnail
 ├── tools/                    # Automation scripts
 │   ├── dependencies/           # SteamworksPy DLLs, steam_appid.txt, requirements.txt, and steamworks module
+│   ├── cmm-visual-editor.bat    # CMM Visual Editor launcher (auto-installs deps)
 │   ├── setup.py                 # Initial project setup script
 │   ├── upload.py            # Build a minimal release folder and upload it to Steam Workshop
 │   ├── translate.py             # Auto-translate localization files with DeepL or Gemini
@@ -76,6 +77,19 @@ Note that without the toolkit remote, you will have to manually check and copy o
 If you are familiar with Git, you can also manually add the remote for ease of updating.
 
 ## Provided Tools
+
+### cmm-visual-editor.bat
+A browser-based visual editor for creating a mod menu in the [Community Mod Menu (CMM)](https://eu5.paradoxwikis.com/Community_Mod_Menu) without writing code. It generates all necessary Paradox script and localization files automatically.
+
+Supported setting types: toggle, button, numeric, slider, dropdown, text, and list settings — with per-mod tabs, groups, search, and global settings with host-only access in multiplayer.
+
+#### Usage
+Double-click `tools/cmm-visual-editor.bat`, or run from the terminal:
+```bash
+tools\cmm-visual-editor.bat
+```
+
+For full documentation, see the [Community Mod Menu wiki page](https://eu5.paradoxwikis.com/Community_Mod_Menu).
 
 ### upload.py
 Builds a minimal release folder and uploads to Steam Workshop, and can also upload Workshop page titles/descriptions.
