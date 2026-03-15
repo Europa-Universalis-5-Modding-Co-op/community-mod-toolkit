@@ -1,5 +1,5 @@
 #!/bin/bash
-Commented out to prevent accidental execution.
+# Commented out to prevent accidental execution.
 set -e # Stop the script if any command fails
 
 # --- Configuration ---
