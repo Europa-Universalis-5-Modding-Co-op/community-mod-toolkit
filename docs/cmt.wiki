@@ -2,8 +2,9 @@
 |type=Mod Development Toolkit
 |logo=CMT_Logo.png
 |author=Conner
-|status=Upcoming
+|status=Released
 |github=Europa-Universalis-5-Modding-Co-op/community-mod-toolkit
+|nocat=true
 }}
 
 = Overview =
@@ -132,5 +133,5 @@ See the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-too
 * [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework Community Mod Framework (GitHub)]
 
 {{Modding navbox
-|category=Modding tools
+|category=Community Mod Framework
 }}
