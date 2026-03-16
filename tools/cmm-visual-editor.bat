@@ -6,7 +6,7 @@ REM Installs all dependencies automatically and launches the tool.
 REM Flags:
 REM   --update   Force reinstall to latest version
 REM   --dev      Use the dev branch instead of main
-set BAT_VERSION=1 &REM:launcher-version
+set BAT_VERSION=1
 
 set CMM_BRANCH=main
 set FORCE_UPDATE=0
@@ -38,7 +38,7 @@ REM Self-update check (skip for temp downloads)
 echo "%~f0" | findstr /i /c:"%TEMP%" >nul 2>&1
 if !errorlevel! neq 0 (
     set REMOTE_BAT_VER=
-    for /f "delims=" %%v in ('curl.exe -sL --max-time 3 "!CMM_BAT_URL!" 2^>nul ^| findstr "launcher-version"') do (
+    for /f "delims=" %%v in ('curl.exe -sL --max-time 3 "!CMM_BAT_URL!" 2^>nul ^| findstr /b /c:"set BAT_VERSION"') do (
         for /f "tokens=2 delims==" %%u in ("%%v") do (
             for /f %%w in ("%%u") do set "REMOTE_BAT_VER=%%w"
         )
@@ -124,7 +124,7 @@ if !errorlevel! equ 0 (
 REM Forced update
 if !FORCE_UPDATE! equ 1 (
     echo Updating CMM Visual Editor from !CMM_BRANCH!...
-    "%PYTHON%" -m pipx install --force "!CMM_SPEC!" >nul 2>&1
+    "%PYTHON%" -m pipx install --force cmm-visual-editor@!CMM_SPEC! >nul 2>&1
     goto :run
 )
 
@@ -132,7 +132,7 @@ REM Local launcher - install if needed, check for updates, then run
 "%PYTHON%" -m pipx list --short 2>nul | findstr /b "cmm-visual-editor" >nul 2>&1
 if !errorlevel! neq 0 (
     echo Installing CMM Visual Editor...
-    "%PYTHON%" -m pipx install --force "!CMM_SPEC!" >nul 2>&1
+    "%PYTHON%" -m pipx install --force cmm-visual-editor@!CMM_SPEC! >nul 2>&1
     if !errorlevel! neq 0 (
         echo ERROR: Failed to install CMM Visual Editor.
         pause
@@ -157,10 +157,11 @@ for /f "delims=" %%v in ('curl.exe -sL --max-time 3 "!CMM_VERSION_URL!" 2^>nul')
 if defined LOCAL_VER if defined REMOTE_VER (
     if not "!LOCAL_VER!"=="!REMOTE_VER!" (
         echo Updating CMM Visual Editor !LOCAL_VER! -^> !REMOTE_VER!...
-        "%PYTHON%" -m pipx install --force "!CMM_SPEC!" >nul 2>&1
+        "%PYTHON%" -m pipx install --force cmm-visual-editor@!CMM_SPEC! >nul 2>&1
     )
 )
 
 :run
 echo Starting CMM Visual Editor...
-"%PYTHON%" -m cmm_visual_editor !EXTRA_ARGS!
+set "PATH=%USERPROFILE%\.local\bin;%PATH%"
+cmm-visual-editor.exe !EXTRA_ARGS!
