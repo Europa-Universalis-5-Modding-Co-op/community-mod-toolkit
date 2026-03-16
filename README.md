@@ -1,8 +1,8 @@
 # Community Mod Toolkit
 
-A community-driven toolkit for [Europa Universalis V](https://store.steampowered.com/app/3450310/Europa_Universalis_V/) modding. It provides a mod template and a set of integrated tools for automating common tasks like Steam Workshop uploads and localization translation.
+A community-driven toolkit for [Europa Universalis V](https://store.steampowered.com/app/3450310/Europa_Universalis_V/) modding. It provides a mod template and a set of integrated tools for automating common tasks like Steam Workshop uploads, localization translation, and a mod menu creator tool.
 
-This is a companion to the [Community Mod Framework](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework) ([wiki](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework/wiki)), which provides shared in-game features like the [Community Mod Menu](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework/wiki/Community-Mod-Menu), Custom Alerts, and more. The toolkit handles the development workflow, while the framework provides the in-game systems.
+This is a companion to the [Community Mod Framework](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework) ([wiki](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework/wiki)), which provides shared in-game features like the [Community Mod Menu](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework/wiki/Community-Mod-Menu), Custom Alerts, and more. You will need this a dependency if you are using the CMM Visual Editor for creating your mod menu.
 
 **[Full Documentation (Wiki)](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki)**
 
