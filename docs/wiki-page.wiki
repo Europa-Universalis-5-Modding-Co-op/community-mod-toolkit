@@ -1,0 +1,136 @@
+{{Modding tool
+|type=Mod Development Toolkit
+|logo=CMT_Logo.png
+|author=Conner
+|status=Upcoming
+|github=Europa-Universalis-5-Modding-Co-op/community-mod-toolkit
+}}
+
+= Overview =
+The Community Mod Toolkit (CMT) is a companion to the [[Community Mod Framework]] that provides a structured mod template and a set of integrated development tools for EU5 mod authors. It automates common tasks like Steam Workshop uploads, multi-language localization, and mod menu creation.
+
+The tools share a common configuration (<code>tools/config.toml</code>) and project structure, so you can set up once and use any combination of them.
+
+CMT is available on [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit GitHub]. For full documentation, see the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki GitHub wiki].
+
+= Setup =
+From the root of your mod's Git repository:
+<syntaxhighlight lang="bash">
+curl.exe -sL https://raw.githubusercontent.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/toolkit-release/tools/setup.py -o setup.py
+python setup.py
+</syntaxhighlight>
+
+This copies all toolkit files into your mod folder, installs Python dependencies, and adds the toolkit as a Git remote for easy updating. The script will not overwrite existing files.
+
+To update the toolkit later:
+<syntaxhighlight lang="bash">
+git fetch community-mod-toolkit
+git merge community-mod-toolkit/toolkit-release --allow-unrelated-histories
+</syntaxhighlight>
+
+= Mod Template =
+The toolkit includes a complete mod template with starter files for metadata, thumbnails (including PSD source templates), localization, Steam Workshop page (BBCode), editor/git configuration for EU5 conventions, an example submod, and a GitHub README template.
+
+See the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/Mod-Template Mod Template] wiki page for details on each file.
+
+= Upload Tool =
+<code>upload.py</code> builds a minimal release folder (stripping tooling, git files, and development artifacts) and uploads it to the Steam Workshop. It can also upload Workshop page titles and descriptions.
+
+<syntaxhighlight lang="bash">
+python tools/upload.py                     # upload using config defaults
+python tools/upload.py --mod               # upload mod content only
+python tools/upload.py --workshop-pages    # upload workshop pages only
+python tools/upload.py --dev               # upload to dev Workshop item
+python tools/upload.py --submods           # upload all submods
+</syntaxhighlight>
+
+{| class="wikitable"
+! Feature !! Description
+|-
+| Dev/Release separation || Separate Workshop items, names, and thumbnails for development and release versions
+|-
+| Workshop pages || Upload translated titles and descriptions to Steam Workshop language pages
+|-
+| Submods || Upload independent sub-mods from <code>submods/</code> with their own metadata and Workshop items
+|-
+| Version gating || Optionally only upload when the <code>metadata.json</code> version has changed
+|-
+| Auto-creation || Set Workshop item ID to <code>0</code> to create a new item on first upload
+|}
+
+Steam must be running for uploads to work.
+
+= Translation Tool =
+<code>translate.py</code> auto-translates localization files and Steam Workshop page titles/descriptions using DeepL or Gemini into all EU5-supported languages.
+
+<syntaxhighlight lang="bash">
+python tools/translate.py              # translate main mod
+python tools/translate.py --submods    # translate main mod + all submods
+</syntaxhighlight>
+
+Requires API keys in a <code>.env</code> file (copy from <code>.env-template</code>):
+<syntaxhighlight lang="text">
+DEEPL_API_KEY=your_key_here
+GEMINI_API_KEY=your_key_here
+</syntaxhighlight>
+
+== Localization Tags ==
+{| class="wikitable"
+! Tag !! Effect
+|-
+| <code># NO-TRANSLATE</code> || Skip a single line
+|-
+| <code># NO-TRANSLATE BELOW</code> || Skip this line and everything below until the end marker
+|-
+| <code># NO-TRANSLATE END</code> || End a <code>NO-TRANSLATE BELOW</code> block
+|-
+| <code># LOCK</code> || Prevent overwriting a translated output line
+|}
+
+EU5 markup tags (<code>[...]</code>, <code>$...$</code>, <code>@...!</code>, <code>#...#!</code>) are preserved automatically during translation.
+
+== Caching ==
+Only changed content is re-translated. Translation hashes are stored in <code>tools/dependencies/.translate_hashes.json</code>. Delete this file to force a full re-translation.
+
+= CMM Visual Editor =
+A browser-based visual editor for creating [[Community Mod Menu]] settings without writing code. It generates all necessary Paradox script and localization files automatically.
+
+<syntaxhighlight lang="powershell">
+tools\cmm-visual-editor.bat
+tools\cmm-visual-editor.bat --update      # force reinstall latest version
+tools\cmm-visual-editor.bat --dev         # use dev branch
+</syntaxhighlight>
+
+The launcher automatically installs Python and pipx if needed. See the [[Community Mod Menu|CMM page]] for full documentation on available setting types.
+
+= Configuration =
+<code>tools/config.toml</code> is the shared configuration file for all tools. Key settings:
+
+{| class="wikitable"
+! Key !! Default !! Description
+|-
+| <code>source_language</code> || <code>"english"</code> || Source language for translations
+|-
+| <code>localization_translator</code> || <code>"deepl"</code> || API for localization (<code>deepl</code> or <code>gemini-3-flash</code>)
+|-
+| <code>translate_workshop</code> || <code>true</code> || Auto-translate workshop title/description
+|-
+| <code>workshop_upload_item_id</code> || <code>0</code> || Workshop item ID (<code>0</code> creates a new item)
+|-
+| <code>upload_mod_by_default</code> || <code>true</code> || Upload mod files by default
+|-
+| <code>upload_workshop_pages_by_default</code> || <code>true</code> || Upload workshop pages by default
+|-
+| <code>upload_only_on_version_change</code> || <code>false</code> || Only upload when version changes
+|}
+
+See the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/Configuration Configuration] wiki page for the full reference.
+
+= Links =
+* [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit GitHub Repository]
+* [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki Full Documentation (GitHub Wiki)]
+* [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework Community Mod Framework (GitHub)]
+
+{{Modding navbox
+|category=Modding tools
+}}
