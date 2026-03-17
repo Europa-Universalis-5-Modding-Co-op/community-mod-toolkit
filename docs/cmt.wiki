@@ -1,3 +1,7 @@
+{| class="wikitable" style="width: 100%; text-align: center;"
+|-
+| [[Community Mod Framework]] || [[Community Mod Menu]] || '''Community Mod Toolkit'''
+|}
 {{Modding tool
 |type=Mod Development Toolkit
 |logo=CMT_Logo.png
@@ -6,11 +10,6 @@
 |github=Europa-Universalis-5-Modding-Co-op/community-mod-toolkit
 |nocat=true
 }}
-
-{| class="wikitable" style="width: 100%; text-align: center;"
-|-
-| [[Community Mod Framework]] || [[Community Mod Menu]] || '''Community Mod Toolkit'''
-|}
 
 = Overview =
 The Community Mod Toolkit (CMT) is a companion to the [[Community Mod Framework]] that provides a structured mod template and a set of integrated development tools for EU5 mod authors. It automates common tasks like Steam Workshop uploads, multi-language localization, and mod menu creation.
