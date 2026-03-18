@@ -136,6 +136,7 @@ See the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-too
 * [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki Full Documentation (GitHub Wiki)]
 * [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework Community Mod Framework (GitHub)]
 
+[[Category:Community Mod Framework]]
 {{Modding navbox
-|category=Community Mod Framework
+|category=Modding tools
 }}
