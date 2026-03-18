@@ -1052,13 +1052,17 @@ def main():
             if item_id is None:
                 return 1
 
-        if upload_mod_effective:
-            if not upload_release(steam.Workshop, release_dir, preview_path, item_id, workshop_title):
+        if upload_workshop_pages:
+            updates = build_workshop_page_updates(
+                config,
+                item_id,
+                dev_mode=args.dev,
+                dev_name=dev_name
+            )
+            if updates is None:
                 return 1
-            uploaded_main = True
-            if upload_only_on_version_change:
-                set_uploaded_version(version_cache, main_cache_key, main_version)
-                save_upload_versions(UPLOAD_VERSIONS_PATH, version_cache)
+            if not upload_workshop_pages_for_item(steam, updates, item_id):
+                return 1
 
         if upload_submods_selected:
             submods_ok, submod_cache_changed = upload_submods(
@@ -1072,17 +1076,13 @@ def main():
             if upload_only_on_version_change and submod_cache_changed:
                 save_upload_versions(UPLOAD_VERSIONS_PATH, version_cache)
 
-        if upload_workshop_pages:
-            updates = build_workshop_page_updates(
-                config,
-                item_id,
-                dev_mode=args.dev,
-                dev_name=dev_name
-            )
-            if updates is None:
+        if upload_mod_effective:
+            if not upload_release(steam.Workshop, release_dir, preview_path, item_id, workshop_title):
                 return 1
-            if not upload_workshop_pages_for_item(steam, updates, item_id):
-                return 1
+            uploaded_main = True
+            if upload_only_on_version_change:
+                set_uploaded_version(version_cache, main_cache_key, main_version)
+                save_upload_versions(UPLOAD_VERSIONS_PATH, version_cache)
 
     if uploaded_main:
         if POST_UPLOAD_DELAY_SECONDS > 0:
