@@ -160,21 +160,49 @@ run_git([
 ])
 
 if has_merge_head():
+    # Reset the index to HEAD so the merge commit only links histories,
+    # without including any toolkit files. MERGE_HEAD is preserved.
+    run_git(["read-tree", "HEAD"])
+
     # --- CLEANUP STEP 1: Remove temporary files from the merge commit ---
     # 1. Remove the setup script so it isn't committed
     run_git(["rm", "-f", "--ignore-unmatch", "tools/setup.py"], check=False)
     # 2. Remove the dummy file so it isn't committed
     run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=False)
 
-    # Finalize the commit.
-    run_git(["commit", "-m", "Link toolkit history"])
+    # Finalize the merge commit (links histories only).
+    run_git(["commit", "--allow-empty", "-m", "Link toolkit history"])
 else:
     print("Toolkit history already linked. Skipping history merge commit.")
 
 # Collect final status messages to print at the end so pip output doesn't trail them.
 final_messages = []
 
-# 4. Apply toolkit files (staged but not committed for review).
+# 3.5. Auto-commit new infrastructure files that don't overwrite existing content.
+print("Applying infrastructure files...")
+
+AUTO_COMMIT_PATHS = ["tools/", ".ignore", ".gitignore", ".gitattributes", ".editorconfig"]
+
+for path in AUTO_COMMIT_PATHS:
+    run_git(["checkout", f"{REMOTE_NAME}/{REMOTE_BRANCH}", "--", path], check=False)
+
+# Remove temp files so they aren't included.
+run_git(["rm", "-f", "--ignore-unmatch", "tools/setup.py"], check=False)
+run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=False)
+
+# Unstage files that would overwrite existing content.
+modified_files = run_git(["diff", "--cached", "--name-only", "--diff-filter=M"])
+if modified_files:
+    run_git(["reset", "HEAD", "--"] + modified_files.splitlines())
+
+# Commit remaining new (Added) files if any exist.
+added_files = run_git(["diff", "--cached", "--name-only"])
+if added_files:
+    count = len(added_files.splitlines())
+    run_git(["commit", "-m", "Add toolkit infrastructure files"])
+    final_messages.append(f"Auto-committed {count} new infrastructure file{'s' if count != 1 else ''}.")
+
+# 4. Apply remaining toolkit files (staged but not committed for review).
 print("Applying toolkit files...")
 
 # Forcefully checkout the release files from the remote.
