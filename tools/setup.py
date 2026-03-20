@@ -216,6 +216,21 @@ run_git(["rm", "-f", "--ignore-unmatch", "in_game/common/dummy.txt"], check=Fals
 final_messages.append("--- Toolkit Linked Successfully ---")
 final_messages.append("Changes are STAGED but NOT committed. Review them before committing.")
 
+# 4.5. Prompt to keep or remove submod example.
+submod_example_dir = os.path.join(ROOT_DIR, "submods", "submod-example")
+if os.path.isdir(submod_example_dir):
+    answer = input("\nInclude submod example? (y/n): ").strip().lower()
+    if answer != "y":
+        shutil.rmtree(submod_example_dir)
+        run_git(["rm", "-rf", "--ignore-unmatch", "submods/submod-example"], check=False)
+        submods_dir = os.path.join(ROOT_DIR, "submods")
+        if os.path.isdir(submods_dir) and not os.listdir(submods_dir):
+            os.rmdir(submods_dir)
+            run_git(["rm", "-rf", "--ignore-unmatch", "submods"], check=False)
+        print("Removed submod example.")
+    else:
+        print("Keeping submod example.")
+
 # 5. Merge .env-template into .env
 merge_env_template(
     os.path.join(ROOT_DIR, ".env-template"),
