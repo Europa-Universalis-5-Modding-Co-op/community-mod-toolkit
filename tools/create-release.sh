@@ -11,8 +11,8 @@ cd "$(dirname "$0")/.."
 # 2. Switch to release
 git checkout toolkit-release
 
-# 3. Wipe current directory
-git rm -rf .
+# 3. Wipe current directory (auto-decline retry prompts for locked dirs on Windows)
+yes n | git rm -rf .
 
 # 4. Overwrite everything with the current version from main
 git checkout main -- .

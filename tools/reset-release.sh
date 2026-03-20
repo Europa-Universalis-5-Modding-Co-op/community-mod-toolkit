@@ -3,7 +3,7 @@
 set -e # Stop the script if any command fails
 
 # --- Configuration ---
-VERSION="Devkit v1.0"
+VERSION="Devkit v0.9"
 
 # --- Script ---
 # 1. Navigate to repo root
@@ -19,8 +19,8 @@ git push origin --delete toolkit-release
 # 4. Create fresh Orphan branch
 git checkout --orphan toolkit-release
 
-# 5. Wipe directory
-git rm -rf .
+# 5. Wipe directory (auto-decline retry prompts for locked dirs on Windows)
+yes n | git rm -rf .
 
 # 6. Overwrite everything with the current version from main
 git checkout main -- .
