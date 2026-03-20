@@ -119,9 +119,13 @@ if not os.path.exists(os.path.join(ROOT_DIR, ".git")):
 # Check for uncommitted changes (Ignoring this script itself)
 status_output = run_git(["status", "--porcelain"])
 if status_output:
-    # Filter out the running script from the status list
+    # Filter out files managed by the setup script itself
     lines = status_output.splitlines()
-    real_changes = [line for line in lines if not line.strip().endswith(SCRIPT_NAME)]
+    real_changes = [
+        line for line in lines
+        if not line.strip().endswith(SCRIPT_NAME)
+        and "submods/submod-example" not in line
+    ]
 
     if real_changes:
         print("Error: You have uncommitted changes in your repository.")
