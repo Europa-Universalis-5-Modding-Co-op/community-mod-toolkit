@@ -154,6 +154,10 @@ run_git(["fetch", REMOTE_NAME])
 # 3. Link the repo's history (safe merge).
 print(f"\nLinking toolkit history...")
 
+# Clean up submod-example state to prevent merge conflicts
+run_git(["reset", "--", "submods/submod-example"], check=False)
+run_git(["checkout", "--", "submods/submod-example"], check=False)
+
 run_git([
     "merge",
     "--no-commit",
