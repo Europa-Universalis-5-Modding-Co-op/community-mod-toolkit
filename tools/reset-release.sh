@@ -29,6 +29,7 @@ git checkout main -- .
 git rm -f README.md
 git rm -f tools/create-release.sh
 git rm -f tools/reset-release.sh
+git rm -rf docs/
 git rm -f assets/images/mod-id-location.png
 git mv -f README-TEMPLATE.md README.md
 
