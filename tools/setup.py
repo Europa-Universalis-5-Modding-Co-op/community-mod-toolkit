@@ -229,7 +229,11 @@ submod_example_dir = os.path.join(ROOT_DIR, "submods", "submod-example")
 if os.path.isdir(submod_example_dir):
     answer = input("\nInclude submod example? (y/n): ").strip().lower()
     if answer != "y":
-        shutil.rmtree(submod_example_dir)
+        import stat
+        def _force_remove(func, path, _exc_info):
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        shutil.rmtree(submod_example_dir, onerror=_force_remove)
         run_git(["rm", "-rf", "--ignore-unmatch", "submods/submod-example"], check=False)
         submods_dir = os.path.join(ROOT_DIR, "submods")
         if os.path.isdir(submods_dir) and not os.listdir(submods_dir):
