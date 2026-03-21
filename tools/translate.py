@@ -588,12 +588,14 @@ def parse_source_entries(lines):
 			key = match.group(2)
 			original_value = match.group(3)
 			comment = match.group(4) if match.group(4) else ""
+			# Skip self-referential keys (key == value)
+			self_ref = (key.strip() == original_value)
 			entries.append({
 				"indent": indent,
 				"key": key,
 				"value": original_value,
 				"comment": comment,
-				"no_translate": no_translate
+				"no_translate": no_translate or self_ref
 			})
 
 	return entries
