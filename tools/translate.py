@@ -118,7 +118,7 @@ def _parse_positive_int(value, label):
 
 def load_config(config_path):
 	"""Load config.toml and validate required keys and values."""
-	invalid = (None,) * 10
+	invalid = (None,) * 11
 
 	if not os.path.exists(config_path):
 		print(f"Error: Config file not found: {config_path}")
@@ -223,6 +223,12 @@ def load_config(config_path):
 		print("Error: gemini_title_system_prompt must be a non-empty string.")
 		return invalid
 
+	gemini_additional_context = data.get("gemini_additional_context", "")
+	if not isinstance(gemini_additional_context, str):
+		print("Error: gemini_additional_context must be a string.")
+		return invalid
+	gemini_additional_context = gemini_additional_context.strip()
+
 	workshop_item_id = None
 	if translate_workshop:
 		if "workshop_upload_item_id" not in data:
@@ -245,6 +251,7 @@ def load_config(config_path):
 		gemini_description_system_prompt,
 		workshop_title_translator,
 		gemini_title_system_prompt,
+		gemini_additional_context,
 		workshop_item_id
 	)
 
@@ -606,10 +613,11 @@ def translate_localization_value_gemini(
 	target_language,
 	key,
 	target_folder_name,
-	system_prompt
+	system_prompt,
+	additional_context=""
 ):
 	"""Translate a single localization value using Gemini."""
-	prompt = _build_gemini_system_prompt(system_prompt, target_language)
+	prompt = _build_gemini_system_prompt(system_prompt, target_language, additional_context)
 	payload = {
 		"systemInstruction": {"parts": [{"text": prompt}]},
 		"contents": [
@@ -645,7 +653,8 @@ def translate_value(
 	target_folder_name,
 	no_translate,
 	localization_translator,
-	gemini_localization_system_prompt
+	gemini_localization_system_prompt,
+	gemini_additional_context=""
 ):
 	"""
 	Translate a single value with tag masking and validation.
@@ -666,7 +675,8 @@ def translate_value(
 			target_language,
 			key,
 			target_folder_name,
-			gemini_localization_system_prompt
+			gemini_localization_system_prompt,
+			gemini_additional_context
 		)
 		if translated_text is None:
 			print(f"  [Error] Failed to translate line: {key} (Gemini request failed)")
@@ -775,7 +785,8 @@ def update_target_lines(
 	source_lang_deepl,
 	target_folder_name,
 	localization_translator,
-	gemini_localization_system_prompt
+	gemini_localization_system_prompt,
+	gemini_additional_context=""
 ):
 	"""
 	Update only keys that changed in the source (or are missing in the target).
@@ -799,7 +810,8 @@ def update_target_lines(
 			target_folder_name,
 			entry["no_translate"],
 			localization_translator,
-			gemini_localization_system_prompt
+			gemini_localization_system_prompt,
+			gemini_additional_context
 		)
 
 		if key in target_index:
@@ -836,7 +848,8 @@ def translate_source_lines(
 	source_lang_id,
 	source_lang_deepl,
 	localization_translator,
-	gemini_localization_system_prompt
+	gemini_localization_system_prompt,
+	gemini_additional_context=""
 ):
 	"""
 	Translate a full source file into a new target file.
@@ -890,7 +903,8 @@ def translate_source_lines(
 				target_folder_name,
 				False,
 				localization_translator,
-				gemini_localization_system_prompt
+				gemini_localization_system_prompt,
+				gemini_additional_context
 			)
 
 			new_lines.append(build_line(indent, key, translated_text, comment))
@@ -913,6 +927,7 @@ def process_file(
 	changed_keys,
 	localization_translator,
 	gemini_localization_system_prompt,
+	gemini_additional_context,
 	log_prefix
 ):
 	"""Translate/update one localization file for a single target language."""
@@ -938,7 +953,8 @@ def process_file(
 			source_lang_id,
 			source_lang_deepl,
 			localization_translator,
-			gemini_localization_system_prompt
+			gemini_localization_system_prompt,
+			gemini_additional_context
 		)
 		with open(target_filepath, 'w', encoding='utf-8-sig') as f:
 			f.writelines(new_lines)
@@ -980,7 +996,8 @@ def process_file(
 		source_lang_deepl,
 		target_folder_name,
 		localization_translator,
-		gemini_localization_system_prompt
+		gemini_localization_system_prompt,
+		gemini_additional_context
 	) or file_changed
 
 	if file_changed:
@@ -1121,11 +1138,11 @@ def translate_workshop_title(translator, title, deepl_code, source_lang_deepl):
 		print(f"  [Error] Failed to translate workshop title to {deepl_code}: {e}")
 		return None
 
-def translate_workshop_title_gemini(text, target_language, system_prompt):
+def translate_workshop_title_gemini(text, target_language, system_prompt, additional_context=""):
 	"""Translate the workshop title using Gemini."""
 	if text == "":
 		return ""
-	prompt = _build_gemini_system_prompt(system_prompt, target_language)
+	prompt = _build_gemini_system_prompt(system_prompt, target_language, additional_context)
 	payload = {
 		"systemInstruction": {"parts": [{"text": prompt}]},
 		"contents": [
@@ -1162,12 +1179,15 @@ def translate_workshop_description(translator, text, deepl_code, source_lang_dee
 		print(f"  [Error] Failed to translate workshop description to {deepl_code}: {e}")
 		return None
 
-def _build_gemini_system_prompt(template, target_language):
-	"""Fill the {target_language} placeholder in the system prompt."""
+def _build_gemini_system_prompt(template, target_language, additional_context=""):
+	"""Fill the {target_language} placeholder in the system prompt and append additional context."""
 	try:
-		return template.format(target_language=target_language)
+		prompt = template.format(target_language=target_language)
 	except Exception:
-		return template
+		prompt = template
+	if additional_context:
+		prompt += "\n\nAdditional context: " + additional_context
+	return prompt
 
 def _gemini_generate_content(payload):
 	"""Call the Gemini generateContent API with retries."""
@@ -1237,11 +1257,11 @@ def _gemini_extract_text(response):
 			text_chunks.append(text)
 	return "".join(text_chunks) if text_chunks else None
 
-def translate_workshop_description_gemini(text, target_language, system_prompt):
+def translate_workshop_description_gemini(text, target_language, system_prompt, additional_context=""):
 	"""Translate the full workshop description using Gemini."""
 	if text == "":
 		return ""
-	prompt = _build_gemini_system_prompt(system_prompt, target_language)
+	prompt = _build_gemini_system_prompt(system_prompt, target_language, additional_context)
 	payload = {
 		"systemInstruction": {"parts": [{"text": prompt}]},
 		"contents": [
@@ -1271,6 +1291,7 @@ def translate_workshop_assets(
 	gemini_description_system_prompt,
 	workshop_title_translator,
 	gemini_title_system_prompt,
+	gemini_additional_context,
 	workshop_item_id,
 	metadata_path,
 	workshop_description_path,
@@ -1341,7 +1362,8 @@ def translate_workshop_assets(
 					translated_title = translate_workshop_title_gemini(
 						title,
 						target_language,
-						gemini_title_system_prompt
+						gemini_title_system_prompt,
+						gemini_additional_context
 					)
 				else:
 					translated_title = translate_workshop_title(
@@ -1370,7 +1392,8 @@ def translate_workshop_assets(
 					translated_description = translate_workshop_description_gemini(
 						description,
 						target_language,
-						gemini_description_system_prompt
+						gemini_description_system_prompt,
+						gemini_additional_context
 					)
 				else:
 					translated_description = translate_workshop_description(
@@ -1439,6 +1462,7 @@ def main():
 		gemini_description_system_prompt,
 		workshop_title_translator,
 		gemini_title_system_prompt,
+		gemini_additional_context,
 		workshop_item_id
 	) = load_config(CONFIG_PATH)
 	if not source_language:
@@ -1513,6 +1537,7 @@ def main():
 							changed_keys,
 							localization_translator,
 							gemini_localization_system_prompt,
+							gemini_additional_context,
 							log_prefix
 						)
 
@@ -1543,6 +1568,7 @@ def main():
 				gemini_description_system_prompt,
 				workshop_title_translator,
 				gemini_title_system_prompt,
+				gemini_additional_context,
 				workshop_item_id,
 				target["metadata_path"],
 				target["workshop_description_path"],

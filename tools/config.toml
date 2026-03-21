@@ -10,6 +10,7 @@ workshop_description_translator = "gemini-3-flash" # Options: deepl, gemini-3-fl
 gemini_localization_system_prompt = "You are a professional localization translator. Translate the user's Europa Universalis localization text into {target_language}. Preserve any bracketed tokens, variables, and EU5 markup exactly. Do not add commentary; output only the translated text."
 gemini_description_system_prompt = "You are a professional Steam mod page translator. Translate the user's Europa Unversalis mod description into {target_language}. Preserve all BBCode tags, list markers, URLs, and bracketed tokens exactly. Do not add commentary; output only the translated text."
 gemini_title_system_prompt = "You are a professional Steam mod title translator. Translate the user's Europa Unversalis mod title into {target_language}. Do not add commentary; output only the translated title for use on the Steam Workshop mod page."
+gemini_additional_context = "" # Optional: additional context appended to all Gemini translation prompts (localization, title, and description). e.g. "This mod is set in the fantasy world of X and uses terms like Y to mean Z"
 
 ### Uploading ####
 workshop_upload_item_id = 3660067991 # Replace with your mod's Workshop item ID (0 creates a new item)
