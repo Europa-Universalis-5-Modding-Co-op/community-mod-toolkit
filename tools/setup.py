@@ -2,7 +2,7 @@ import os, subprocess, sys, shutil
 
 # --- Configuration ---
 DEVKIT_URL = "https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit.git"
-REMOTE_NAME = "toolkit"
+REMOTE_NAME = "cmt"
 REMOTE_BRANCH = "toolkit-release-dev" if "--dev" in sys.argv else "toolkit-release"
 
 # --- Path Setup ---
