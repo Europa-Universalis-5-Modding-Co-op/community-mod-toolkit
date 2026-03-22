@@ -1,0 +1,7 @@
+/.vscode
+/.idea
+.DS_Store
+.env
+__pycache__/
+local/
+launch.json
