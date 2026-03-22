@@ -893,6 +893,7 @@ def translate_source_lines(
 			key = match.group(2)
 			original_value = match.group(3)
 			comment = match.group(4) if match.group(4) else ""
+			self_ref = (key.strip() == original_value)
 
 			translated_text = translate_value(
 				translator,
@@ -901,7 +902,7 @@ def translate_source_lines(
 				deepl_code,
 				source_lang_deepl,
 				target_folder_name,
-				False,
+				self_ref,
 				localization_translator,
 				gemini_localization_system_prompt,
 				gemini_additional_context
