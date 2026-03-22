@@ -2,7 +2,7 @@
 set -e # Stop the script if any command fails
 
 # --- Configuration ---
-VERSION="Toolkit v0.9.0"
+VERSION="Toolkit v1.0.0"
 
 # --- Script ---
 # 1. Navigate to repo root

@@ -3,7 +3,7 @@
 set -e # Stop the script if any command fails
 
 # --- Configuration ---
-VERSION="Devkit v0.9"
+VERSION="Devkit v1.0.0"
 
 # --- Script ---
 # 1. Navigate to repo root
