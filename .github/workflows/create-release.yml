@@ -34,13 +34,26 @@ jobs:
             BRANCH="toolkit-release-dev"
             SOURCE="dev"
 
-            # Auto-increment patch version from last dev commit
+            # Get latest version from both release branches, use the higher one
+            DEV_VER="0.0.0"
+            REL_VER="0.0.0"
             if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
-              LAST=$(git log -1 --format=%s "origin/$BRANCH" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "1.0.0")
-            else
-              LAST="1.0.0"
+              DEV_VER=$(git log -1 --format=%s "origin/$BRANCH" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "0.0.0")
             fi
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST"
+            if git show-ref --verify --quiet "refs/remotes/origin/toolkit-release"; then
+              REL_VER=$(git log -1 --format=%s "origin/toolkit-release" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "0.0.0")
+            fi
+
+            # Compare and take the higher version
+            IFS='.' read -r D_MAJ D_MIN D_PAT <<< "$DEV_VER"
+            IFS='.' read -r R_MAJ R_MIN R_PAT <<< "$REL_VER"
+            if [ "$R_MAJ" -gt "$D_MAJ" ] || \
+               { [ "$R_MAJ" -eq "$D_MAJ" ] && [ "$R_MIN" -gt "$D_MIN" ]; } || \
+               { [ "$R_MAJ" -eq "$D_MAJ" ] && [ "$R_MIN" -eq "$D_MIN" ] && [ "$R_PAT" -gt "$D_PAT" ]; }; then
+              MAJOR=$R_MAJ; MINOR=$R_MIN; PATCH=$R_PAT
+            else
+              MAJOR=$D_MAJ; MINOR=$D_MIN; PATCH=$D_PAT
+            fi
             VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
           else
             BRANCH="toolkit-release"
