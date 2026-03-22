@@ -1,0 +1,88 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g., 1.0.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update release branch
+        run: |
+          # Switch to release branch
+          git checkout toolkit-release
+
+          # Wipe current directory
+          git rm -rf .
+
+          # Overwrite with current main
+          git checkout main -- .
+
+          # Remove dev-only files
+          git rm -f README.md
+          git rm -rf docs/
+          git rm -f assets/images/mod-id-location.png
+          git rm -rf .github/
+          git mv -f README-TEMPLATE.md README.md
+
+          # Reset Workshop item ID
+          config_path="tools/config.toml"
+          awk '
+          BEGIN { updated = 0 }
+          /^[[:space:]]*workshop_upload_item_id[[:space:]]*=/ {
+            match($0, /^[[:space:]]*workshop_upload_item_id[[:space:]]*=[[:space:]]*/)
+            prefix = substr($0, RSTART, RLENGTH)
+            rest = substr($0, RSTART + RLENGTH)
+            sub(/^[^#[:space:]]+/, "", rest)
+            print prefix "0" rest
+            updated = 1
+            next
+          }
+          { print }
+          END {
+            if (!updated) {
+              print "workshop_upload_item_id = 0"
+            }
+          }
+          ' "$config_path" > "${config_path}.tmp"
+          mv "${config_path}.tmp" "$config_path"
+          git add "$config_path"
+
+          # Commit and push
+          git commit -m "v${{ inputs.version }}"
+          git push origin toolkit-release
+
+      - name: Create release assets
+        run: |
+          git archive --format=zip --prefix="Community-Mod-Toolkit-v${{ inputs.version }}/" \
+            -o "Community-Mod-Toolkit-v${{ inputs.version }}.zip" toolkit-release
+          cp tools/setup.py setup.py
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            "Community-Mod-Toolkit-v${{ inputs.version }}.zip" \
+            "setup.py" \
+            --title "v${{ inputs.version }}" \
+            --target toolkit-release \
+            --generate-notes
