@@ -12,7 +12,7 @@
 }}
 
 = Overview =
-The Community Mod Toolkit (CMT) is a companion to the [[Community Mod Framework]] that provides a structured mod template and a set of integrated development tools for EU5 mod authors. It automates common tasks like Steam Workshop uploads, multi-language localization, and mod menu creation.
+The Community Mod Toolkit (CMT) is a companion to the [[Community Mod Framework]] that provides a mod template, editor and Git configuration that automatically enforces EU5 formatting conventions, and a set of integrated tools for EU5 mod authors.
 
 The tools share a common configuration (<code>tools/config.toml</code>) and project structure, so you can set up once and use any combination of them.
 
@@ -34,9 +34,26 @@ git merge community-mod-toolkit/toolkit-release --allow-unrelated-histories
 </syntaxhighlight>
 
 = Mod Template =
-The toolkit includes a complete mod template with starter files for metadata, thumbnails (including PSD source templates), localization, Steam Workshop page (BBCode), editor/git configuration for EU5 conventions, an example submod, and a GitHub README template.
+The toolkit includes a complete mod template with starter files for metadata, thumbnails (including PSD source templates), localization, Steam Workshop page (BBCode), an example submod, and a GitHub README template.
 
 See the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/Mod-Template Mod Template] wiki page for details on each file.
+
+= Editor and Git Configuration =
+The toolkit includes pre-configured <code>.editorconfig</code>, <code>.gitattributes</code>, <code>.gitignore</code>, and <code>.ignore</code> files that automatically enforce EU5 formatting conventions without any manual setup.
+
+{| class="wikitable"
+! File !! What It Does
+|-
+| <code>.editorconfig</code> || Automatically sets UTF-8 BOM encoding on <code>.txt</code>, <code>.yml</code>, and <code>.gui</code> files, CRLF line endings, and correct indentation (tabs for script, 1-space for localization YAML).
+|-
+| <code>.gitattributes</code> || Normalizes line endings at the Git level so contributors on any OS get correct CRLF/LF handling.
+|-
+| <code>.gitignore</code> || Excludes IDE directories, <code>.env</code> (API keys), Python cache, and other files that shouldn't be committed.
+|-
+| <code>.ignore</code> || Search-ignore file for tools like [https://github.com/BurntSushi/ripgrep ripgrep]. Less aggressive than <code>.gitignore</code> so local files still appear in search results.
+|}
+
+EditorConfig is built into JetBrains IDEs (IntelliJ, Rider, etc.) and works out of the box. VS Code requires the [https://marketplace.visualstudio.com/items?itemName=EditorConfig.EditorConfig EditorConfig for VS Code] extension. See the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/Editor-and-Git-Configuration Editor and Git Configuration] wiki page for full details.
 
 = Upload Tool =
 <code>upload.py</code> builds a minimal release folder (stripping tooling, git files, and development artifacts) and uploads it to the Steam Workshop. It can also upload Workshop page titles and descriptions.
