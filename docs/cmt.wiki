@@ -78,6 +78,8 @@ python tools/upload.py --submods           # upload all submods
 | Version gating || Optionally only upload when the <code>metadata.json</code> version has changed
 |-
 | Auto-creation || Set Workshop item ID to <code>0</code> to create a new item on first upload
+|-
+| Change notes || Versioned change notes from <code>assets/workshop/change-notes.bbcode</code>, matched to your <code>metadata.json</code> version on upload
 |}
 
 Steam must be running for uploads to work.
