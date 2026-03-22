@@ -45,7 +45,7 @@ WORKSHOP_TITLE_MARKER = "===WORKSHOP_TITLE==="
 WORKSHOP_DESCRIPTION_MARKER = "===WORKSHOP_DESCRIPTION==="
 WORKSHOP_NO_TRANSLATE_BELOW = "--NO-TRANSLATE-BELOW--"
 WORKSHOP_ITEM_ID_TOKEN = "$item-id$"
-CHANGE_NOTES_VERSION_RE = re.compile(r"^#\s*v(.+)$")
+CHANGE_NOTES_VERSION_RE = re.compile(r"^#\s*(v(.+?):?\s*)$")
 
 ALLOWED_WORKSHOP_DESCRIPTION_TRANSLATORS = {"deepl", "gemini-3-flash"}
 ALLOWED_WORKSHOP_TITLE_TRANSLATORS = {"deepl", "gemini-3-flash"}
@@ -1092,7 +1092,7 @@ def parse_change_notes_entry(text, version=None):
 		if m:
 			if current_version is not None:
 				entries.append((current_version, "".join(current_lines).strip()))
-			current_version = m.group(1).strip()
+			current_version = m.group(2).strip()
 			current_lines = []
 		elif current_version is not None:
 			current_lines.append(line)
