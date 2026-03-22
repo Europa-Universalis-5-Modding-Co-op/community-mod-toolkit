@@ -237,7 +237,7 @@ if os.path.isdir(submod_example_dir):
         run_git(["rm", "-rf", "--ignore-unmatch", "submods/submod-example"], check=False)
         submods_dir = os.path.join(ROOT_DIR, "submods")
         if os.path.isdir(submods_dir) and not os.listdir(submods_dir):
-            os.rmdir(submods_dir)
+            shutil.rmtree(submods_dir, onerror=_force_remove)
             run_git(["rm", "-rf", "--ignore-unmatch", "submods"], check=False)
         print("Removed submod example.")
     else:
