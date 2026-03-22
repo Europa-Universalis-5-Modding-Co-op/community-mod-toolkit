@@ -105,23 +105,14 @@ jobs:
           git commit -m "v${VERSION}"
           git push origin "$BRANCH"
 
-      - name: Create release assets
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          BRANCH="${{ steps.config.outputs.branch }}"
-          VERSION="${{ steps.config.outputs.version }}"
-          git archive --format=zip --prefix="Community-Mod-Toolkit-v${VERSION}/" \
-            -o "Community-Mod-Toolkit-v${VERSION}.zip" "$BRANCH"
-          cp tools/setup.py setup.py
-
       - name: Create GitHub release
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.config.outputs.version }}"
+          cp tools/setup.py setup.py
           gh release create "v${VERSION}" \
-            "Community-Mod-Toolkit-v${VERSION}.zip" \
             "setup.py" \
             --title "v${VERSION}" \
             --target toolkit-release \
