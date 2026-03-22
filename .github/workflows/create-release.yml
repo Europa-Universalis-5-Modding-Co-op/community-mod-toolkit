@@ -1,6 +1,8 @@
 name: Create Release
 
 on:
+  push:
+    branches: [dev]
   workflow_dispatch:
     inputs:
       version:
@@ -25,16 +27,49 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Determine version and branch
+        id: config
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BRANCH="toolkit-release-dev"
+            SOURCE="dev"
+
+            # Auto-increment patch version from last dev commit
+            if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+              LAST=$(git log -1 --format=%s "origin/$BRANCH" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "1.0.0")
+            else
+              LAST="1.0.0"
+            fi
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST"
+            VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          else
+            BRANCH="toolkit-release"
+            SOURCE="main"
+            VERSION="${{ inputs.version }}"
+          fi
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Update release branch
         run: |
-          # Switch to release branch
-          git checkout toolkit-release
+          BRANCH="${{ steps.config.outputs.branch }}"
+          SOURCE="${{ steps.config.outputs.source }}"
+          VERSION="${{ steps.config.outputs.version }}"
+
+          # Switch to release branch (create orphan if it doesn't exist)
+          if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+            git checkout "$BRANCH"
+          else
+            git checkout --orphan "$BRANCH"
+          fi
 
           # Wipe current directory
           git rm -rf .
 
-          # Overwrite with current main
-          git checkout main -- .
+          # Overwrite with source branch
+          git checkout "$SOURCE" -- .
 
           # Remove dev-only files
           git rm -f README.md
@@ -67,22 +102,27 @@ jobs:
           git add "$config_path"
 
           # Commit and push
-          git commit -m "v${{ inputs.version }}"
-          git push origin toolkit-release
+          git commit -m "v${VERSION}"
+          git push origin "$BRANCH"
 
       - name: Create release assets
+        if: github.event_name == 'workflow_dispatch'
         run: |
-          git archive --format=zip --prefix="Community-Mod-Toolkit-v${{ inputs.version }}/" \
-            -o "Community-Mod-Toolkit-v${{ inputs.version }}.zip" toolkit-release
+          BRANCH="${{ steps.config.outputs.branch }}"
+          VERSION="${{ steps.config.outputs.version }}"
+          git archive --format=zip --prefix="Community-Mod-Toolkit-v${VERSION}/" \
+            -o "Community-Mod-Toolkit-v${VERSION}.zip" "$BRANCH"
           cp tools/setup.py setup.py
 
       - name: Create GitHub release
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ inputs.version }}" \
-            "Community-Mod-Toolkit-v${{ inputs.version }}.zip" \
+          VERSION="${{ steps.config.outputs.version }}"
+          gh release create "v${VERSION}" \
+            "Community-Mod-Toolkit-v${VERSION}.zip" \
             "setup.py" \
-            --title "v${{ inputs.version }}" \
+            --title "v${VERSION}" \
             --target toolkit-release \
             --generate-notes
