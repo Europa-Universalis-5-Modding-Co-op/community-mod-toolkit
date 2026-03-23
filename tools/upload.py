@@ -1177,7 +1177,10 @@ def main():
             )
             if updates is None:
                 return 1
-            if not upload_workshop_pages_for_item(steam, updates, item_id, upload_change_notes=upload_change_notes):
+            # Only attach change notes to workshop page updates if the mod itself isn't also being uploaded
+            # (otherwise the same change note appears twice in the Steam changelog).
+            pages_change_notes = upload_change_notes and not upload_mod_effective
+            if not upload_workshop_pages_for_item(steam, updates, item_id, upload_change_notes=pages_change_notes):
                 return 1
 
         if upload_submods_selected:
