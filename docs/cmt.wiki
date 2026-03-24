@@ -30,7 +30,7 @@ This copies all toolkit files into your mod folder, installs Python dependencies
 To update the toolkit later:
 <syntaxhighlight lang="bash">
 git fetch cmt
-git merge cmt/toolkit-release
+git merge cmt/toolkit-release --no-edit
 </syntaxhighlight>
 
 = Mod Template =
