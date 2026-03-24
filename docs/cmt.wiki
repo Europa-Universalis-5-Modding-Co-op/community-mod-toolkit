@@ -29,8 +29,8 @@ This copies all toolkit files into your mod folder, installs Python dependencies
 
 To update the toolkit later:
 <syntaxhighlight lang="bash">
-git fetch community-mod-toolkit
-git merge community-mod-toolkit/toolkit-release --allow-unrelated-histories
+git fetch cmt
+git merge cmt/toolkit-release
 </syntaxhighlight>
 
 = Mod Template =
