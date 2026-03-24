@@ -79,7 +79,7 @@ python tools/upload.py --submods           # upload all submods
 |-
 | Auto-creation || Set Workshop item ID to <code>0</code> to create a new item on first upload
 |-
-| Change notes || Versioned change notes from <code>assets/workshop/change-notes.bbcode</code>. Each entry starts with a <code># v</code> header; the entry matching your <code>metadata.json</code> version is uploaded. Headers with a trailing colon (<code># v1.0:</code>) prepend the version line; headers without a colon upload only the body
+| Change notes || Versioned change notes from <code>assets/workshop/change-notes.bbcode</code>. Each entry starts with a <code># v</code> or <code>[b]v...[/b]</code> header; the entry matching your <code>metadata.json</code> version is uploaded. <code># v1.0:</code> headers (with colon) prepend <code>[b]v1.0:[/b]</code>; without a colon, only the body is uploaded. <code>[b]v1.0:[/b]</code> and <code>[b]v1.0[/b]</code> headers always prepend the version line as-is
 |}
 
 Steam must be running for uploads to work.
