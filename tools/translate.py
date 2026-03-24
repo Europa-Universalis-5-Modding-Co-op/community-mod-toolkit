@@ -270,12 +270,12 @@ def parse_args():
 		description="Translate localization and optional workshop text."
 	)
 	parser.add_argument(
-		"--submods",
+		"-s", "--submods",
 		action="store_true",
 		help="Also process all submods under submods/* (overrides translate_submods_by_default for this run)."
 	)
 	parser.add_argument(
-		"--change-notes",
+		"-cn", "--change-notes",
 		action="store_true",
 		help="Also translate change notes (overrides translate_change_notes_by_default for this run)."
 	)
