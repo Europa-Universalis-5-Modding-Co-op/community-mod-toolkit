@@ -885,12 +885,18 @@ def parse_change_notes_entry(text, version=None):
     for line in text.splitlines(keepends=True):
         m = CHANGE_NOTES_VERSION_RE.match(line.strip())
         if m:
-            if current_version is not None:
-                entries.append((current_version, current_has_colon, current_is_bb, "".join(current_lines).strip()))
-            current_version = m.group('ver').strip()
-            current_has_colon = ":" in m.group('tail')
-            current_is_bb = m.group('bb') is not None
-            current_lines = []
+            new_ver = m.group('ver').strip()
+            if new_ver == current_version:
+                # Duplicate header for the same version (e.g. markdown ``# v1.0``
+                # followed by BBCode ``[b]v1.0[/b]``).  Treat as body content.
+                current_lines.append(line)
+            else:
+                if current_version is not None:
+                    entries.append((current_version, current_has_colon, current_is_bb, "".join(current_lines).strip()))
+                current_version = new_ver
+                current_has_colon = ":" in m.group('tail')
+                current_is_bb = m.group('bb') is not None
+                current_lines = []
         elif current_version is not None:
             current_lines.append(line)
 
