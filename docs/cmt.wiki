@@ -137,7 +137,7 @@ The launcher automatically installs Python and pipx if needed. See the [[Communi
 |-
 | <code>localization_translator</code> || <code>"deepl"</code> || API for localization (<code>deepl</code> or <code>gemini-3-flash</code>)
 |-
-| <code>translate_workshop</code> || <code>true</code> || Auto-translate workshop title/description
+| <code>translate_workshop_by_default</code> || <code>true</code> || Auto-translate workshop title/description
 |-
 | <code>workshop_upload_item_id</code> || <code>0</code> || Workshop item ID (<code>0</code> creates a new item)
 |-
