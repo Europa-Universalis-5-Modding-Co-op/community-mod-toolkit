@@ -233,6 +233,23 @@ class SteamWorkshop(object):
         return self.steam.Workshop_SetItemPreview(update_handle, preview_image.encode())
 
 
+    def SetRequiredGameVersions(self, update_handle: int, game_branch_min: str = None, game_branch_max: str = None) -> bool:
+        """Sets the min/max game branch versions a Workshop item update is valid for.
+
+        Pass an empty string (or None) for either side to leave that bound unset; the SDK
+        treats an empty string as "match any version on that end of the range." Only applied
+        when the update also changes content.
+
+        :param update_handle: int
+        :param game_branch_min: str or None
+        :param game_branch_max: str or None
+        :return: bool
+        """
+        encoded_min = game_branch_min.encode() if game_branch_min else b""
+        encoded_max = game_branch_max.encode() if game_branch_max else b""
+        return self.steam.Workshop_SetRequiredGameVersions(update_handle, encoded_min, encoded_max)
+
+
     def SubmitItemUpdate(self, update_handle: int, change_note: str, callback: object = None, \
                          override_callback: bool = False) -> None:
         """Submit the item update with the given handle to Steam

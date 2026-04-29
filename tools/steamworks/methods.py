@@ -382,6 +382,10 @@ STEAMWORKS_METHODS = {
         'restype': bool,
         'argtypes': [c_uint64, c_char_p]
     },
+    'Workshop_SetRequiredGameVersions': {
+        'restype': bool,
+        'argtypes': [c_uint64, c_char_p, c_char_p]
+    },
     'Workshop_SubmitItemUpdate': {
         'argtypes': [c_uint64, c_char_p]
     },
