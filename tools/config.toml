@@ -22,6 +22,8 @@ upload_only_on_version_change = false # If true, mod/submod uploads only run whe
 upload_change_notes_by_default = false # Should running upload.py upload change notes? You can also use -cn/--change-notes instead.
 upload_submods_by_default = false # Should running upload.py upload all submods from submods/? You can also use -s/--submods instead.
 workshop_dev_name = "" # Optional: override dev mod name for upload.py -d/--dev
+workshop_from_game_version = "" # Optional: What game version should the upload be Linked to? (Latest by default)
+workshop_to_game_version = "" # Optional: What game version should the upload be Linked to? (Latest by default)
 
 ### GUI Update ###
 game_directory = "" # Path to EU5 game directory (e.g. "C:/Steam/steamapps/common/Europa Universalis V/game"). Auto-detected if empty.

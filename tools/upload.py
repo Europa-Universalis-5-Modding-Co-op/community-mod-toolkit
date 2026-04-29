@@ -128,6 +128,22 @@ def load_dev_name(config):
     dev_name = str(dev_name).strip()
     return dev_name if dev_name else None
 
+def load_dev_from_version(config):
+    """Load an optional from_version mod version from config data."""
+    from_version = config.get("workshop_from_game_version")
+    if from_version is None:
+        return None
+    from_version = str(from_version).strip()
+    return from_version if from_version else None
+
+def load_dev_to_version(config):
+    """Load an optional to_version mod version from config data."""
+    to_version = config.get("workshop_to_game_version")
+    if to_version is None:
+        return None
+    to_version = str(to_version).strip()
+    return to_version if to_version else None
+
 def load_source_language(config):
     """Load and validate source_language used for workshop page uploads."""
     source_language = config.get("source_language")
@@ -577,7 +593,7 @@ def ensure_submod_item_id(steam, mod_id, workshop_id, config_path):
 
     return new_id
 
-def upload_submods(steam, config, version_gate_enabled=False, force_upload=False, version_cache=None, upload_change_notes=False):
+def upload_submods(steam, config, from_version, to_version, version_gate_enabled=False, force_upload=False, version_cache=None, upload_change_notes=False):
     submods_root = os.path.join(ROOT_DIR, SUBMODS_DIR_NAME)
     if not os.path.isdir(submods_root):
         print(f"Warning: submods folder not found: {submods_root}")
@@ -641,7 +657,7 @@ def upload_submods(steam, config, version_gate_enabled=False, force_upload=False
         if not os.path.exists(preview_path):
             preview_path = None
 
-        if not upload_release(steam, meta["root"], preview_path, workshop_id, title):
+        if not upload_release(steam, meta["root"], preview_path, workshop_id, from_version, to_version, title):
             success = False
             continue
 
@@ -824,7 +840,7 @@ def _submit_and_wait(steam, handle, change_note="", show_progress=False):
 
     return True
 
-def upload_release(steam, content_dir, preview_path, item_id, workshop_title=None, change_note=""):
+def upload_release(steam, content_dir, preview_path, item_id, from_version, to_version, workshop_title=None, change_note=""):
     if not os.path.isdir(content_dir):
         print(f"Error: Release directory not found: {content_dir}")
         return False
@@ -851,6 +867,8 @@ def upload_release(steam, content_dir, preview_path, item_id, workshop_title=Non
         if preview_result is False:
             print("Error: SetItemPreview failed.")
             return False
+
+    workshop.SetRequiredGameVersions(handle, from_version, to_version)
 
     print("Workshop update submitted. Waiting for upload to complete...")
     if not _submit_and_wait(steam, handle, change_note, show_progress=True):
@@ -1261,6 +1279,8 @@ def main():
     item_label = "dev item id" if args.dev else "item id"
     item_id = None
     dev_name = load_dev_name(config) if args.dev else None
+    dev_from_version = load_dev_from_version(config) if args.dev else "Latest Version"
+    dev_to_version = load_dev_to_version(config) if args.dev else "Latest Version"
 
     if upload_mod_effective or upload_workshop_pages or upload_change_notes:
         item_id = load_workshop_item_id(config, item_id_key, item_label)
@@ -1287,8 +1307,7 @@ def main():
             change_note = load_change_notes(CHANGE_NOTES_PATH, item_id, version=main_version) or ""
 
         if upload_mod_effective:
-            if not upload_release(steam, release_dir, preview_path, item_id,
-                                  workshop_title, change_note=change_note):
+            if not upload_release(steam, release_dir, preview_path, item_id, dev_from_version, dev_to_version, workshop_title, change_note=change_note):
                 return 1
             uploaded_main = True
 
@@ -1311,6 +1330,8 @@ def main():
             submods_ok, submod_cache_changed = upload_submods(
                 steam,
                 config,
+				dev_from_version,
+				dev_to_version,
                 version_gate_enabled=upload_only_on_version_change,
                 force_upload=force_upload,
                 version_cache=version_cache,

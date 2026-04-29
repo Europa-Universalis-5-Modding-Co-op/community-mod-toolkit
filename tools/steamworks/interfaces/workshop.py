@@ -376,3 +376,12 @@ class SteamWorkshop(object):
             }
 
         return {}
+
+    def SetRequiredGameVersions(self, pszGameBranchMin: str, pszGameBranchMax: str) -> bool:
+        """Get the current state of a workshop item
+
+        :param pszGameBranchMin: str
+        :param pszGameBranchMax: str
+        :return: bool
+        """
+        return self.steam.Workshop_SetRequiredGameVersions(self, pszGameBranchMin, pszGameBranchMax)
