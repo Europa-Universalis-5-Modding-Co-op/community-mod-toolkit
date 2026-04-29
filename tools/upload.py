@@ -1279,8 +1279,8 @@ def main():
     item_label = "dev item id" if args.dev else "item id"
     item_id = None
     dev_name = load_dev_name(config) if args.dev else None
-    dev_from_version = load_dev_from_version(config) if args.dev else "Latest Version"
-    dev_to_version = load_dev_to_version(config) if args.dev else "Latest Version"
+    dev_from_version = load_dev_from_version(config) if args.dev else "public" # public = Latest Version
+    dev_to_version = load_dev_to_version(config) if args.dev else "public" # public = Latest Version
 
     if upload_mod_effective or upload_workshop_pages or upload_change_notes:
         item_id = load_workshop_item_id(config, item_id_key, item_label)
