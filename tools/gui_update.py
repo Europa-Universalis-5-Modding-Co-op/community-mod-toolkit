@@ -37,6 +37,8 @@ ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.toml")
 
 GUI_SOURCES = ["in_game", "main_menu", "loading_screen"]
+# Subdirs treated as vanilla extracts (not mod overrides) and skipped.
+EXCLUDED_DIRS = {"vanilla"}
 TRACKING_DIR_NAME = ".gui-tracking"
 TRACKING_DIR = os.path.join(ROOT_DIR, TRACKING_DIR_NAME)
 MANIFEST_PATH = os.path.join(TRACKING_DIR, "manifest.json")
@@ -430,7 +432,8 @@ def _scan_definitions(base_dir, source_dirs):
         gui_dir = os.path.join(base_dir, source, "gui")
         if not os.path.isdir(gui_dir):
             continue
-        for dirpath, _, filenames in os.walk(gui_dir):
+        for dirpath, dirnames, filenames in os.walk(gui_dir):
+            dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
             for fname in sorted(filenames):
                 if not fname.endswith(".gui"):
                     continue
