@@ -63,6 +63,9 @@ _TEMPLATE_RE = re.compile(r"template\s+(\w+)\s*(\{)?\s*(?:#.*)?$")
 # Only matched on lines with NO leading whitespace (top-level).
 _WIDGET_INSTANCE_RE = re.compile(r"(\w+)\s*=\s*(\{)?\s*(?:#.*)?$")
 _NAME_PROP_RE = re.compile(r'name\s*=\s*"([^"]+)"')
+_CONSTANT_RE = re.compile(r"@(\w+)\s*=")
+# Match @name and @[name ...] (first name only) for body references.
+_CONSTANT_REF_RE = re.compile(r"@\[?(\w+)")
 
 # ─── Data Structures ─────────────────────────────────────────────────────────
 
@@ -137,6 +140,21 @@ def parse_gui_file(text, source_file):
 
     while i < len(lines):
         stripped = lines[i].lstrip()
+
+        # ── Constant declaration (file-scope, column 0 only) ──────
+        if lines[i][:1] == "@":
+            m = _CONSTANT_RE.match(lines[i])
+            if m:
+                cname = m.group(1)
+                definitions.append(GuiDefinition(
+                    name=cname, kind="constant",
+                    namespace=None, base_widget=None,
+                    text=lines[i].rstrip("\r"),
+                    source_file=source_file,
+                    start_line=i, end_line=i,
+                ))
+            i += 1
+            continue
 
         # ── Template ──────────────────────────────────────────────
         m = _TEMPLATE_RE.match(stripped)
@@ -420,8 +438,18 @@ def _tracking_path(kind, name):
     return f"{TRACKING_DIR_NAME}/{subdirs[kind]}/{name}.gui"
 
 
+def _constant_tracking_path(mod_file, vanilla_file, name):
+    mod_safe = os.path.splitext(mod_file.replace("/", "__"))[0]
+    vanilla_safe = os.path.splitext(vanilla_file.replace("/", "__"))[0]
+    return f"{TRACKING_DIR_NAME}/constants/{mod_safe}/{vanilla_safe}/{name}.gui"
+
+
 def _tracking_key(kind, name):
     return f"{kind}:{name}"
+
+
+def _constant_tracking_key(mod_file, vanilla_file, name):
+    return f"constant:{mod_file}:{vanilla_file}:{name}"
 
 # ─── Scanner ─────────────────────────────────────────────────────────────────
 
@@ -450,14 +478,21 @@ def _scan_definitions(base_dir, source_dirs):
 
 
 def _find_overrides(mod_defs, vanilla_defs):
-    """Return ``[(mod_def, vanilla_def), …]`` for names that appear in both."""
+    """Return ``[(mod_def, vanilla_def), …]`` for names that appear in both.
+
+    Constants are file-scoped and handled separately by ``_link_constants``.
+    """
     vanilla_map = {}
     for d in vanilla_defs:
+        if d.kind == "constant":
+            continue
         key = _tracking_key(d.kind, d.name)
         vanilla_map.setdefault(key, d)
 
     mod_map = {}
     for d in mod_defs:
+        if d.kind == "constant":
+            continue
         key = _tracking_key(d.kind, d.name)
         if key in mod_map:
             prev = mod_map[key]
@@ -468,6 +503,41 @@ def _find_overrides(mod_defs, vanilla_defs):
 
     return [(mod_map[k], vanilla_map[k])
             for k in sorted(mod_map) if k in vanilla_map]
+
+
+def _link_constants(mod_defs, vanilla_defs, override_pairs):
+    """Return ``[(mod_const, vanilla_const), …]`` linked by file-scope usage.
+
+    A mod constant is tracked only when an override in the same mod file
+    references it. The vanilla side is the same-named constant in each
+    vanilla file containing such an overridden definition - so a single
+    mod constant can produce N pairs when its file overrides definitions
+    from N distinct vanilla files.
+    """
+    mod_consts = {}
+    for d in mod_defs:
+        if d.kind == "constant":
+            mod_consts.setdefault(d.source_file, {}).setdefault(d.name, d)
+
+    vanilla_consts = {}
+    for d in vanilla_defs:
+        if d.kind == "constant":
+            vanilla_consts.setdefault(d.source_file, {}).setdefault(d.name, d)
+
+    usage = {}
+    for mod_def, vanilla_def in override_pairs:
+        for name in _CONSTANT_REF_RE.findall(mod_def.text):
+            usage.setdefault((mod_def.source_file, name), set()).add(
+                vanilla_def.source_file)
+
+    pairs = []
+    for mod_file, by_name in mod_consts.items():
+        for name, mod_const in by_name.items():
+            for vfile in usage.get((mod_file, name), ()):
+                vd = vanilla_consts.get(vfile, {}).get(name)
+                if vd is not None:
+                    pairs.append((mod_const, vd))
+    return pairs
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -566,17 +636,24 @@ def cmd_init(args):
     print(f"  Found {len(vanilla_defs)} definition(s) in vanilla.")
 
     overrides = _find_overrides(mod_defs, vanilla_defs)
-    if not overrides:
+    constants = _link_constants(mod_defs, vanilla_defs, overrides)
+    total = len(overrides) + len(constants)
+    if not total:
         print("\nNo overrides detected — your mod does not override "
-              "any vanilla GUI types or templates.")
+              "any vanilla GUI types, templates, widgets, or constants.")
         return 0
 
     n_types = sum(1 for m, _ in overrides if m.kind == "type")
     n_tmpls = sum(1 for m, _ in overrides if m.kind == "template")
-    print(f"\nDetected {len(overrides)} override(s) "
-          f"({n_types} type(s), {n_tmpls} template(s)):")
+    n_consts = len(constants)
+    print(f"\nDetected {total} override(s) "
+          f"({n_types} type(s), {n_tmpls} template(s), "
+          f"{n_consts} constant(s)):")
     for md, _ in overrides:
         print(f"  {md.kind}: {md.name}  ({md.source_file})")
+    for md, vd in constants:
+        print(f"  constant: @{md.name}  "
+              f"({md.source_file} <- {vd.source_file})")
 
     # Build manifest + vanilla tracking files
     manifest = {"version": MANIFEST_VERSION, "definitions": {}}
@@ -588,6 +665,19 @@ def cmd_init(args):
         manifest["definitions"][key] = {
             "namespace": md.namespace,
             "base_widget": md.base_widget,
+            "mod_file": md.source_file,
+            "vanilla_file": vd.source_file,
+            "tracking_path": tp,
+        }
+        header = _make_tracking_header(vd.source_file, md.source_file)
+        vanilla_files[tp] = header + vd.text + "\n"
+
+    for md, vd in constants:
+        key = _constant_tracking_key(md.source_file, vd.source_file, md.name)
+        tp = _constant_tracking_path(md.source_file, vd.source_file, md.name)
+        manifest["definitions"][key] = {
+            "kind": "constant",
+            "name": md.name,
             "mod_file": md.source_file,
             "vanilla_file": vd.source_file,
             "tracking_path": tp,
@@ -610,14 +700,18 @@ def cmd_init(args):
         tp = _tracking_path(md.kind, md.name)
         header = _make_tracking_header(vd.source_file, md.source_file)
         _write_tracking_file(tp, header + md.text + "\n")
+    for md, vd in constants:
+        tp = _constant_tracking_path(md.source_file, vd.source_file, md.name)
+        header = _make_tracking_header(vd.source_file, md.source_file)
+        _write_tracking_file(tp, header + md.text + "\n")
     _save_manifest(manifest)
 
     # 4. Commit
     run_git(["add", TRACKING_DIR_NAME + "/"])
     run_git(["commit", "-m",
-             f"Initialize GUI tracking with {len(overrides)} definition(s)"])
+             f"Initialize GUI tracking with {total} definition(s)"])
 
-    print(f"\nDone! Tracking {len(overrides)} GUI override(s).")
+    print(f"\nDone! Tracking {total} GUI override(s).")
     print("Run 'gui_update.py check' after a game update to detect changes.")
     return 0
 
@@ -635,8 +729,12 @@ def cmd_check(args):
     print("Scanning current vanilla GUI files...")
     vanilla_defs = _scan_definitions(game_dir, GUI_SOURCES)
     vanilla_map = {}
+    vanilla_consts = {}
     for d in vanilla_defs:
-        vanilla_map[_tracking_key(d.kind, d.name)] = d
+        if d.kind == "constant":
+            vanilla_consts.setdefault((d.source_file, d.name), d)
+        else:
+            vanilla_map.setdefault(_tracking_key(d.kind, d.name), d)
 
     changed = []
     removed = []
@@ -645,8 +743,12 @@ def cmd_check(args):
         old = _read_from_branch(VANILLA_BRANCH, entry["tracking_path"])
         if old is None:
             continue
-        if key in vanilla_map:
-            new = vanilla_map[key].text + "\n"
+        if key.startswith("constant:"):
+            vd = vanilla_consts.get((entry["vanilla_file"], entry["name"]))
+        else:
+            vd = vanilla_map.get(key)
+        if vd is not None:
+            new = vd.text + "\n"
             if _body_hash(old) != _body_hash(new):
                 changed.append((key, entry))
         else:
@@ -687,16 +789,24 @@ def cmd_merge(args):
     print("Syncing tracking files from current mod content...")
     mod_defs = _scan_definitions(ROOT_DIR, GUI_SOURCES)
     mod_map = {}
+    mod_consts = {}
     for d in mod_defs:
-        mod_map.setdefault(_tracking_key(d.kind, d.name), d)
+        if d.kind == "constant":
+            mod_consts.setdefault((d.source_file, d.name), d)
+        else:
+            mod_map.setdefault(_tracking_key(d.kind, d.name), d)
 
     synced = 0
     removed_keys = []
     new_definitions = {}
     for key, entry in manifest["definitions"].items():
-        if key in mod_map:
-            md = mod_map[key]
-            if entry["mod_file"] != md.source_file:
+        if key.startswith("constant:"):
+            md = mod_consts.get((entry["mod_file"], entry["name"]))
+        else:
+            md = mod_map.get(key)
+        if md is not None:
+            if (not key.startswith("constant:")
+                    and entry["mod_file"] != md.source_file):
                 entry["mod_file"] = md.source_file
             new_definitions[key] = entry
             tp = entry["tracking_path"]
@@ -742,17 +852,25 @@ def cmd_merge(args):
     print("Scanning current vanilla GUI files...")
     vanilla_defs = _scan_definitions(game_dir, GUI_SOURCES)
     vanilla_map = {}
+    vanilla_consts = {}
     for d in vanilla_defs:
-        vanilla_map[_tracking_key(d.kind, d.name)] = d
+        if d.kind == "constant":
+            vanilla_consts.setdefault((d.source_file, d.name), d)
+        else:
+            vanilla_map.setdefault(_tracking_key(d.kind, d.name), d)
 
     tracking_files = {}
     updated = 0
     for key, entry in manifest["definitions"].items():
         tp = entry["tracking_path"]
-        if key in vanilla_map:
+        if key.startswith("constant:"):
+            vd = vanilla_consts.get((entry["vanilla_file"], entry["name"]))
+        else:
+            vd = vanilla_map.get(key)
+        if vd is not None:
             header = _make_tracking_header(
                 entry["vanilla_file"], entry["mod_file"])
-            new_content = header + vanilla_map[key].text + "\n"
+            new_content = header + vd.text + "\n"
             old_content = _read_from_branch(VANILLA_BRANCH, tp)
             tracking_files[tp] = new_content
             if (old_content is None
@@ -811,6 +929,12 @@ def cmd_apply(args):
     applied = 0
     errors = 0
 
+    # Read all tracking files first so constant value divergence (multiple
+    # entries pointing at the same @name in the same mod file but resolving
+    # to different values) can be reported before any file is touched.
+    const_groups = {}
+    to_apply = []
+
     for key, entry in sorted(manifest["definitions"].items()):
         tp = entry["tracking_path"]
         abs_tp = os.path.join(ROOT_DIR, tp.replace("/", os.sep))
@@ -822,6 +946,25 @@ def cmd_apply(args):
         with open(abs_tp, "r", encoding="utf-8") as f:
             new_text = _strip_tracking_header(f.read()).rstrip("\n")
 
+        if key.startswith("constant:"):
+            const_groups.setdefault(
+                (entry["mod_file"], entry["name"]), []
+            ).append((key, entry, new_text))
+        else:
+            to_apply.append((key, entry, new_text))
+
+    for (mod_file, name), items in const_groups.items():
+        unique = set(it[2] for it in items)
+        if len(unique) > 1:
+            print(f"  Error: Divergent vanilla values for @{name} "
+                  f"in {mod_file}:")
+            for _k, e, t in items:
+                print(f"    from {e['vanilla_file']}: {t}")
+            errors += 1
+            continue
+        to_apply.append(items[0])
+
+    for key, entry, new_text in to_apply:
         mod_file = entry["mod_file"]
         abs_mod = os.path.join(ROOT_DIR, mod_file.replace("/", os.sep))
 
@@ -837,8 +980,13 @@ def cmd_apply(args):
         has_crlf = b"\r\n" in raw
         mod_text = raw.decode("utf-8-sig").replace("\r\n", "\n")
 
-        kind, name = key.split(":", 1)
-        namespace = entry.get("namespace")
+        if key.startswith("constant:"):
+            kind = "constant"
+            name = entry["name"]
+            namespace = None
+        else:
+            kind, name = key.split(":", 1)
+            namespace = entry.get("namespace")
 
         span = find_definition_in_file(mod_text, name, kind, namespace)
         if span is None:
@@ -894,9 +1042,13 @@ def cmd_refresh(args):
     vanilla_defs = _scan_definitions(game_dir, GUI_SOURCES)
 
     overrides = _find_overrides(mod_defs, vanilla_defs)
+    constants = _link_constants(mod_defs, vanilla_defs, overrides)
     new_keys = {}
     for md, vd in overrides:
         new_keys[_tracking_key(md.kind, md.name)] = (md, vd)
+    for md, vd in constants:
+        new_keys[_constant_tracking_key(
+            md.source_file, vd.source_file, md.name)] = (md, vd)
 
     old_set = set(manifest["definitions"])
     new_set = set(new_keys)
@@ -917,14 +1069,25 @@ def cmd_refresh(args):
 
     for key in sorted(new_set):
         md, vd = new_keys[key]
-        tp = _tracking_path(md.kind, md.name)
-        new_manifest["definitions"][key] = {
-            "namespace": md.namespace,
-            "base_widget": md.base_widget,
-            "mod_file": md.source_file,
-            "vanilla_file": vd.source_file,
-            "tracking_path": tp,
-        }
+        if md.kind == "constant":
+            tp = _constant_tracking_path(
+                md.source_file, vd.source_file, md.name)
+            new_manifest["definitions"][key] = {
+                "kind": "constant",
+                "name": md.name,
+                "mod_file": md.source_file,
+                "vanilla_file": vd.source_file,
+                "tracking_path": tp,
+            }
+        else:
+            tp = _tracking_path(md.kind, md.name)
+            new_manifest["definitions"][key] = {
+                "namespace": md.namespace,
+                "base_widget": md.base_widget,
+                "mod_file": md.source_file,
+                "vanilla_file": vd.source_file,
+                "tracking_path": tp,
+            }
         header = _make_tracking_header(vd.source_file, md.source_file)
         _write_tracking_file(tp, header + md.text + "\n")
 
@@ -940,15 +1103,23 @@ def cmd_refresh(args):
 
     # Update vanilla branch
     vanilla_map = {}
+    vanilla_consts = {}
     for d in vanilla_defs:
-        vanilla_map[_tracking_key(d.kind, d.name)] = d
+        if d.kind == "constant":
+            vanilla_consts.setdefault((d.source_file, d.name), d)
+        else:
+            vanilla_map.setdefault(_tracking_key(d.kind, d.name), d)
     vanilla_files = {}
     for key, entry in new_manifest["definitions"].items():
-        if key in vanilla_map:
+        if key.startswith("constant:"):
+            vd = vanilla_consts.get((entry["vanilla_file"], entry["name"]))
+        else:
+            vd = vanilla_map.get(key)
+        if vd is not None:
             header = _make_tracking_header(
                 entry["vanilla_file"], entry["mod_file"])
             vanilla_files[entry["tracking_path"]] = (
-                header + vanilla_map[key].text + "\n")
+                header + vd.text + "\n")
     _update_vanilla_branch(vanilla_files,
                            "Refresh vanilla GUI definitions")
 
@@ -976,6 +1147,7 @@ def cmd_status(args):
 
     types = sorted(k for k in defs if k.startswith("type:"))
     templates = sorted(k for k in defs if k.startswith("template:"))
+    constants = sorted(k for k in defs if k.startswith("constant:"))
 
     if types:
         print(f"\n  Types ({len(types)}):")
@@ -991,6 +1163,14 @@ def cmd_status(args):
         for key in templates:
             e = defs[key]
             print(f"    {key}")
+            print(f"      mod: {e['mod_file']}")
+            print(f"      vanilla: {e['vanilla_file']}")
+
+    if constants:
+        print(f"\n  Constants ({len(constants)}):")
+        for key in constants:
+            e = defs[key]
+            print(f"    @{e['name']}")
             print(f"      mod: {e['mod_file']}")
             print(f"      vanilla: {e['vanilla_file']}")
 
