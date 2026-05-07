@@ -682,6 +682,62 @@ def cmd_merge(args):
     _ensure_clean_worktree()
     _ensure_no_merge()
 
+    # Sync tracking from current mod state so OURS in the merge reflects
+    # edits/deletions made since the last refresh.
+    print("Syncing tracking files from current mod content...")
+    mod_defs = _scan_definitions(ROOT_DIR, GUI_SOURCES)
+    mod_map = {}
+    for d in mod_defs:
+        mod_map.setdefault(_tracking_key(d.kind, d.name), d)
+
+    synced = 0
+    removed_keys = []
+    new_definitions = {}
+    for key, entry in manifest["definitions"].items():
+        if key in mod_map:
+            md = mod_map[key]
+            if entry["mod_file"] != md.source_file:
+                entry["mod_file"] = md.source_file
+            new_definitions[key] = entry
+            tp = entry["tracking_path"]
+            header = _make_tracking_header(
+                entry["vanilla_file"], entry["mod_file"])
+            new_text = header + md.text + "\n"
+            abs_tp = os.path.join(ROOT_DIR, tp.replace("/", os.sep))
+            old_text = None
+            if os.path.isfile(abs_tp):
+                with open(abs_tp, "r", encoding="utf-8") as f:
+                    old_text = f.read()
+            if old_text != new_text:
+                _write_tracking_file(tp, new_text)
+                synced += 1
+        else:
+            removed_keys.append(key)
+            abs_tp = os.path.join(
+                ROOT_DIR, entry["tracking_path"].replace("/", os.sep))
+            if os.path.isfile(abs_tp):
+                os.remove(abs_tp)
+
+    if synced or removed_keys:
+        manifest["definitions"] = new_definitions
+        _save_manifest(manifest)
+        run_git(["add", "-A", TRACKING_DIR_NAME + "/"])
+        parts = []
+        if synced:
+            parts.append(f"{synced} updated")
+        if removed_keys:
+            parts.append(f"{len(removed_keys)} removed")
+        run_git(["commit", "-m",
+                 "Sync tracking from mod state: " + ", ".join(parts)])
+        if synced:
+            print(f"  {synced} tracking file(s) updated.")
+        if removed_keys:
+            print(f"  {len(removed_keys)} stale entry(ies) removed:")
+            for k in removed_keys:
+                print(f"    - {k}")
+    else:
+        print("  Tracking already in sync with mod.")
+
     # Update vanilla branch with current vanilla definitions
     print("Scanning current vanilla GUI files...")
     vanilla_defs = _scan_definitions(game_dir, GUI_SOURCES)
