@@ -507,6 +507,31 @@ def _content_hash(content):
     return hashlib.sha256(n.encode("utf-8")).hexdigest()
 
 
+def _make_tracking_header(vanilla_file, mod_file):
+    return (f"# vanilla: {vanilla_file}\n"
+            f"# mod: {mod_file}\n"
+            f"\n")
+
+
+def _strip_tracking_header(content):
+    lines = content.split("\n")
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].rstrip("\r ")
+        if (stripped.startswith("# vanilla:")
+                or stripped.startswith("# mod:")):
+            i += 1
+        else:
+            break
+    if i > 0 and i < len(lines) and lines[i].strip() == "":
+        i += 1
+    return "\n".join(lines[i:])
+
+
+def _body_hash(content):
+    return _content_hash(_strip_tracking_header(content))
+
+
 def _write_tracking_file(rel_path, content):
     """Write a tracking file under ROOT_DIR."""
     abs_path = os.path.join(ROOT_DIR, rel_path.replace("/", os.sep))
@@ -567,7 +592,8 @@ def cmd_init(args):
             "vanilla_file": vd.source_file,
             "tracking_path": tp,
         }
-        vanilla_files[tp] = vd.text + "\n"
+        header = _make_tracking_header(vd.source_file, md.source_file)
+        vanilla_files[tp] = header + vd.text + "\n"
 
     # 1. Create gui/vanilla orphan branch (via plumbing — no checkout)
     print(f"\nCreating {VANILLA_BRANCH} branch...")
@@ -580,9 +606,10 @@ def cmd_init(args):
              VANILLA_BRANCH])
 
     # 3. Overwrite with mod versions + add manifest
-    for md, _ in overrides:
+    for md, vd in overrides:
         tp = _tracking_path(md.kind, md.name)
-        _write_tracking_file(tp, md.text + "\n")
+        header = _make_tracking_header(vd.source_file, md.source_file)
+        _write_tracking_file(tp, header + md.text + "\n")
     _save_manifest(manifest)
 
     # 4. Commit
@@ -620,7 +647,7 @@ def cmd_check(args):
             continue
         if key in vanilla_map:
             new = vanilla_map[key].text + "\n"
-            if _content_hash(old) != _content_hash(new):
+            if _body_hash(old) != _body_hash(new):
                 changed.append((key, entry))
         else:
             removed.append((key, entry))
@@ -667,11 +694,13 @@ def cmd_merge(args):
     for key, entry in manifest["definitions"].items():
         tp = entry["tracking_path"]
         if key in vanilla_map:
-            new_content = vanilla_map[key].text + "\n"
+            header = _make_tracking_header(
+                entry["vanilla_file"], entry["mod_file"])
+            new_content = header + vanilla_map[key].text + "\n"
             old_content = _read_from_branch(VANILLA_BRANCH, tp)
             tracking_files[tp] = new_content
             if (old_content is None
-                    or _content_hash(old_content) != _content_hash(new_content)):
+                    or _body_hash(old_content) != _body_hash(new_content)):
                 updated += 1
 
     if updated == 0:
@@ -735,7 +764,7 @@ def cmd_apply(args):
             continue
 
         with open(abs_tp, "r", encoding="utf-8") as f:
-            new_text = f.read().rstrip("\n")
+            new_text = _strip_tracking_header(f.read()).rstrip("\n")
 
         mod_file = entry["mod_file"]
         abs_mod = os.path.join(ROOT_DIR, mod_file.replace("/", os.sep))
@@ -840,7 +869,8 @@ def cmd_refresh(args):
             "vanilla_file": vd.source_file,
             "tracking_path": tp,
         }
-        _write_tracking_file(tp, md.text + "\n")
+        header = _make_tracking_header(vd.source_file, md.source_file)
+        _write_tracking_file(tp, header + md.text + "\n")
 
     # Remove stale tracking files
     for key in removed:
@@ -859,8 +889,10 @@ def cmd_refresh(args):
     vanilla_files = {}
     for key, entry in new_manifest["definitions"].items():
         if key in vanilla_map:
-            vanilla_files[entry["tracking_path"]] = \
-                vanilla_map[key].text + "\n"
+            header = _make_tracking_header(
+                entry["vanilla_file"], entry["mod_file"])
+            vanilla_files[entry["tracking_path"]] = (
+                header + vanilla_map[key].text + "\n")
     _update_vanilla_branch(vanilla_files,
                            "Refresh vanilla GUI definitions")
 
