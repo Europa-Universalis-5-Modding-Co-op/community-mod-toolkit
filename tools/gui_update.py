@@ -404,17 +404,6 @@ def _ensure_no_merge():
         sys.exit(1)
 
 
-def _ensure_rerere_enabled():
-    """Turn on rerere so resolved conflicts get replayed on re-runs."""
-    if run_git(["config", "--get", "rerere.enabled"],
-               check=False) == "true":
-        return
-    run_git(["config", "rerere.enabled", "true"])
-    print("Enabled rerere in this repo (replays prior conflict "
-          "resolutions; undo a bad replay with "
-          "'git rerere forget <path>').")
-
-
 def _read_from_branch(branch, path):
     """Read a file from *branch* without switching.  Returns content or ``None``."""
     return run_git(["show", f"{branch}:{path}"], check=False)
@@ -751,13 +740,14 @@ def _three_way_merge_string(base, ours, theirs):
                 f.write({"base": base, "ours": ours, "theirs": theirs}[name])
         result = subprocess.run(
             ["git", "merge-file", "-p", "--zdiff3",
-             "--diff-algorithm=histogram",
+             "--diff-algorithm=histogram", "--ignore-all-space",
              "-L", "ours", "-L", "base", "-L", "theirs",
              paths["ours"], paths["base"], paths["theirs"]],
             cwd=ROOT_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
         )
         if result.returncode < 0:
             print("Error: git merge-file failed.")
@@ -1085,7 +1075,6 @@ def cmd_merge(args):
 
     _ensure_clean_worktree()
     _ensure_no_merge()
-    _ensure_rerere_enabled()
     _ensure_vanilla_merged_ref()
 
     # If HEAD is a merge commit from a previous run (user resolved
@@ -1109,6 +1098,12 @@ def cmd_merge(args):
         run_git(["update-ref",
                  f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
         _push_refs([MERGED_BRANCH])
+        # Force-push the working branch since flatten rewrote its history;
+        # without this, GitHub Desktop sync produces phantom merge conflicts.
+        current_branch = run_git(
+            ["branch", "--show-current"], check=False)
+        if current_branch:
+            _push_refs([current_branch], force=True)
         merged_sha = vanilla_sha
 
     # Sync tracking from current mod state so OURS in the merge reflects
