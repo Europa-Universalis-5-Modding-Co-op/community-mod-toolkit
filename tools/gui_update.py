@@ -827,6 +827,11 @@ def _stage_merge_entries(path, base_content, ours_content, theirs_content):
     whether the file exists in the working tree; plain ``--remove`` is
     a no-op when the file is on disk, which leaves stage 0 alongside
     the unmerged stages and causes git to ignore the additions.
+
+    Input is sent as bytes (not ``text=True``) because Python's text
+    mode translates ``\\n`` to ``\\r\\n`` on Windows, and git's
+    ``--index-info`` parser then treats the trailing ``\\r`` as part of
+    the path and silently ignores the entry.
     """
     run_git(["update-index", "--force-remove", path], check=False)
     lines = []
@@ -844,8 +849,7 @@ def _stage_merge_entries(path, base_content, ours_content, theirs_content):
     subprocess.run(
         ["git", "update-index", "--index-info"],
         cwd=ROOT_DIR,
-        input="\n".join(lines) + "\n",
-        text=True,
+        input=("\n".join(lines) + "\n").encode("utf-8"),
         check=True,
     )
 
