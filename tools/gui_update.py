@@ -5,12 +5,17 @@ Uses two git refs to track vanilla state:
 * ``gui/vanilla``: branch holding the latest vanilla definitions. Advances
   when ``merge`` detects a game update.
 * ``gui/vanilla-merged``: bookmark on the same chain pointing at the last
-  successfully merged vanilla commit. Used as the merge base for the next
-  three-way merge.
+  successfully merged vanilla commit. Used as the explicit merge base for
+  per-file three-way merges so the merge result does not depend on git's
+  parent-link auto-detection.
 
-Updates are merged per-file via ``git merge-file`` (three-way merge using
-explicit base/ours/theirs) so the result is a regular single-parent commit
-on the working branch instead of a multi-parent merge commit.
+Merging is per-file via ``git merge-file`` with the explicit base from
+``gui/vanilla-merged``. When a file conflicts the script also populates
+the git index with stages 1/2/3 and writes ``.git/MERGE_HEAD`` so VSCode
+(and other git GUIs) see a real merge in progress and offer the 3-way
+merge editor. Once the user resolves and commits, the resulting merge
+commit is flattened into a single-parent commit on the next run so
+github desktop diffs stay clean.
 
 Commands:
     init      Set up tracking for this mod
@@ -720,9 +725,9 @@ def _force_rmtree(path):
 def _three_way_merge_string(base, ours, theirs):
     """Three-way merge of three string contents via ``git merge-file``.
 
-    Returns ``(merged_content, has_conflicts)``. Conflict regions are written
-    inline with the standard ``<<<<<<<`` / ``|||||||`` / ``=======`` /
-    ``>>>>>>>`` markers (zdiff3 style).
+    Returns ``(merged_content, has_conflicts)``. Conflict regions are
+    written inline with the standard ``<<<<<<<`` / ``|||||||`` /
+    ``=======`` / ``>>>>>>>`` markers (zdiff3 style).
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         paths = {
@@ -768,6 +773,75 @@ def _scan_unresolved_conflicts():
                 rel = os.path.relpath(full, ROOT_DIR).replace(os.sep, "/")
                 bad.append(rel)
     return bad
+
+
+def _head_is_vanilla_merge(vanilla_sha):
+    """Return True if HEAD is a merge commit with ``vanilla_sha`` as a parent."""
+    parents_line = run_git(
+        ["rev-list", "--parents", "-n", "1", "HEAD"], check=False)
+    if not parents_line:
+        return False
+    parts = parents_line.split()
+    # parts = [HEAD, parent1, parent2, ...]; merge commits have len >= 3
+    if len(parts) < 3:
+        return False
+    return vanilla_sha in parts[1:]
+
+
+def _flatten_head_merge_commit():
+    """Rewrite HEAD merge commit as a regular single-parent commit.
+
+    Soft-resets to first parent (preserving index + working tree), then
+    re-commits with the same message and tree. Net result: identical
+    content, but history shows a normal linear commit instead of a
+    2-parent merge so github desktop diffs read cleanly.
+    """
+    msg = run_git(["log", "-1", "--pretty=%B", "HEAD"]) or "Update vanilla GUI definitions"
+    run_git(["reset", "--soft", "HEAD^1"])
+    run_git(["commit", "-m", msg])
+
+
+def _setup_merge_state(merge_head_sha, merge_msg):
+    """Write ``.git/MERGE_HEAD``, ``.git/MERGE_MSG``, and ``ORIG_HEAD``
+    so git/VSCode recognize a merge in progress and offer the 3-way
+    merge editor. ``ORIG_HEAD`` lets ``git merge --abort`` work to back
+    out of the attempt cleanly.
+    """
+    git_dir = os.path.join(ROOT_DIR, ".git")
+    head_sha = run_git(["rev-parse", "HEAD"])
+    for name, content in (
+        ("MERGE_HEAD", merge_head_sha),
+        ("MERGE_MSG", merge_msg),
+        ("ORIG_HEAD", head_sha),
+    ):
+        with open(os.path.join(git_dir, name), "w",
+                  encoding="utf-8", newline="\n") as f:
+            f.write(content + "\n")
+
+
+def _stage_merge_entries(path, base_content, ours_content, theirs_content):
+    """Populate index stages 1/2/3 for ``path`` so git treats the file
+    as conflicted (which is what VSCode's merge editor keys off)."""
+    run_git(["update-index", "--remove", path], check=False)
+    lines = []
+    if base_content is not None:
+        sha = _git_hash_object(base_content)
+        lines.append(f"100644 {sha} 1\t{path}")
+    if ours_content is not None:
+        sha = _git_hash_object(ours_content)
+        lines.append(f"100644 {sha} 2\t{path}")
+    if theirs_content is not None:
+        sha = _git_hash_object(theirs_content)
+        lines.append(f"100644 {sha} 3\t{path}")
+    if not lines:
+        return
+    subprocess.run(
+        ["git", "update-index", "--index-info"],
+        cwd=ROOT_DIR,
+        input="\n".join(lines) + "\n",
+        text=True,
+        check=True,
+    )
 
 # ─── Commands ────────────────────────────────────────────────────────────────
 
@@ -972,23 +1046,28 @@ def cmd_merge(args):
     _ensure_rerere_enabled()
     _ensure_vanilla_merged_ref()
 
-    # Auto-finalize: gui/vanilla advanced last run but the bookmark
-    # never caught up (user resolved conflicts and committed but did
-    # not re-run merge to finish). Refuse if conflict markers remain.
+    # If HEAD is a merge commit from a previous run (user resolved
+    # conflicts in a merge editor and committed), flatten it now into a
+    # single-parent commit and advance the bookmark. The flatten
+    # preserves the resolved tree exactly, only the parent linkage
+    # changes.
     vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
     merged_sha = run_git(["rev-parse", MERGED_BRANCH])
-    if vanilla_sha != merged_sha:
+    if vanilla_sha != merged_sha and _head_is_vanilla_merge(vanilla_sha):
         bad = _scan_unresolved_conflicts()
         if bad:
-            print("Error: tracking files still contain conflict markers:")
+            print("Error: tracking files contain conflict markers:")
             for f in bad:
                 print(f"  {f}")
-            print("\nResolve conflicts and commit, then re-run merge.")
+            print("\nFix the markers, re-stage, and amend the commit, "
+                  "then re-run merge.")
             return 1
-        print(f"Finalizing previous merge: advancing {MERGED_BRANCH}.")
+        print("Flattening previous merge commit into single-parent...")
+        _flatten_head_merge_commit()
         run_git(["update-ref",
                  f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
         _push_refs([MERGED_BRANCH])
+        merged_sha = vanilla_sha
 
     # Sync tracking from current mod state so OURS in the merge reflects
     # edits/deletions made since the last refresh.
@@ -1083,22 +1162,34 @@ def cmd_merge(args):
                     or _body_hash(old_content) != _body_hash(new_content)):
                 updated += 1
 
-    if updated == 0:
+    # gui/vanilla-merged trailing gui/vanilla without a HEAD merge commit
+    # means the previous merge was aborted; re-run the merge from current
+    # gui/vanilla rather than treating it as a no-op.
+    behind_vanilla = vanilla_sha != merged_sha
+
+    if updated == 0 and not behind_vanilla:
         print("Vanilla branch already up to date. Nothing to merge.")
         return 0
 
-    print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) changed)...")
-    new_vanilla_sha = _update_vanilla_branch(
-        tracking_files,
-        f"Update {updated} vanilla GUI definition(s)")
+    if updated > 0:
+        print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) changed)...")
+        new_vanilla_sha = _update_vanilla_branch(
+            tracking_files,
+            f"Update {updated} vanilla GUI definition(s)")
+    else:
+        print(f"{VANILLA_BRANCH} has unmerged commits from a previous "
+              "run; resuming merge.")
+        new_vanilla_sha = vanilla_sha
 
-    # Per-file three-way merge. base = gui/vanilla-merged, theirs =
-    # gui/vanilla, ours = working tree. Result writes back to working
-    # tree (with conflict markers if needed) producing a regular
-    # single-parent commit instead of a merge commit.
-    print("Merging into working tree...")
+    # Per-file three-way merge with explicit base ``gui/vanilla-merged``
+    # and theirs ``gui/vanilla``. Doing this manually (rather than via
+    # ``git merge``) lets us flatten the final commit to a single parent
+    # without breaking base detection on the next run, since the next
+    # base comes from the bookmark ref and not from git ancestry.
+    print("Running three-way merge...")
     conflicts = []
-    merged_count = 0
+    clean_paths = []
+
     for key, entry in manifest["definitions"].items():
         tp = entry["tracking_path"]
         abs_tp = os.path.join(ROOT_DIR, tp.replace("/", os.sep))
@@ -1128,10 +1219,9 @@ def cmd_merge(args):
             if _body_hash(ours) == _body_hash(base):
                 if os.path.isfile(abs_tp):
                     os.remove(abs_tp)
-                merged_count += 1
+                clean_paths.append(tp)
             else:
-                print(f"  Conflict: {tp} (vanilla removed; mod modified)")
-                conflicts.append(tp)
+                conflicts.append((tp, base, ours, None))
             continue
 
         if base is None:
@@ -1146,21 +1236,36 @@ def cmd_merge(args):
         if merged != ours:
             _write_tracking_file(tp, merged)
         if has_conflict:
-            conflicts.append(tp)
+            conflicts.append((tp, base, ours, theirs))
         elif merged != ours:
-            merged_count += 1
+            clean_paths.append(tp)
 
     if conflicts:
+        # Stage the clean files normally.
+        for tp in clean_paths:
+            run_git(["add", tp])
+        # Stage conflicting files at stages 1/2/3 so VSCode (and any git
+        # GUI) sees a real merge conflict and offers the 3-way editor.
+        for tp, base, ours, theirs in conflicts:
+            _stage_merge_entries(tp, base, ours, theirs)
+        # Set MERGE_HEAD/MERGE_MSG so ``git status`` shows a merge in
+        # progress; ``git commit`` will produce a merge commit, which
+        # this script flattens into single-parent on the next run.
+        msg = f"Update {updated} vanilla GUI definition(s)"
+        _setup_merge_state(new_vanilla_sha, msg)
+
         print(f"\nConflicts in {len(conflicts)} file(s):")
-        for c in conflicts:
-            print(f"  {c}")
-        print(f"\nResolve conflicts in {TRACKING_DIR_NAME}/, then:")
+        for tp, _, _, _ in conflicts:
+            print(f"  {tp}")
+        print("\nResolve in VSCode (right-click a conflicted file in the")
+        print("Source Control panel and choose 'Open in Merge Editor'),")
+        print("or in any merge tool, then:")
         print(f"  git add {TRACKING_DIR_NAME}/")
         print("  git commit")
-        print("  python tools/gui_update.py merge   # finalizes the merge")
+        print("  python tools/gui_update.py merge   # flattens + finalizes")
         return 1
 
-    # Stage and commit if there are changes.
+    # No conflicts: stage and commit as a regular single-parent commit.
     run_git(["add", TRACKING_DIR_NAME + "/"])
     diff_check = subprocess.run(
         ["git", "diff", "--cached", "--quiet"],
@@ -1168,15 +1273,15 @@ def cmd_merge(args):
     )
     if diff_check.returncode != 0:
         run_git(["commit", "-m",
-                 f"Update {merged_count} vanilla GUI definition(s)"])
+                 f"Update {len(clean_paths)} vanilla GUI definition(s)"])
 
     # Advance the bookmark to match gui/vanilla.
     run_git(["update-ref",
              f"refs/heads/{MERGED_BRANCH}", new_vanilla_sha])
     _push_refs([MERGED_BRANCH])
 
-    if merged_count:
-        print(f"\nMerge completed cleanly ({merged_count} definition(s) updated).")
+    if clean_paths:
+        print(f"\nMerge completed cleanly ({len(clean_paths)} definition(s) updated).")
     else:
         print("\nMerge completed (no file-level changes).")
     print("Run 'gui_update.py apply' to sync changes to mod GUI files.")
