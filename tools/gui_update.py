@@ -386,16 +386,26 @@ def _read_from_branch(branch, path):
     return run_git(["show", f"{branch}:{path}"], check=False)
 
 
-def _push_vanilla_branch():
+def _push_vanilla_branch(force=False):
     """Push VANILLA_BRANCH to origin if configured.  No-op for local-only repos.
 
     Failures (offline, auth, non-fast-forward) warn but don't abort.
+    With ``force=True`` uses ``--force-with-lease`` so a fresh orphan from
+    'init --force' replaces the stale remote tip without needing manual
+    deletion. Lease still refuses if the remote moved unexpectedly.
     """
     if run_git(["remote", "get-url", "origin"], check=False) is None:
         return
-    print(f"Pushing {VANILLA_BRANCH} to origin...")
+    print(f"Pushing {VANILLA_BRANCH} to origin"
+          f"{' (force-with-lease)' if force else ''}...")
+    cmd = ["git", "push"]
+    if force:
+        cmd.append("--force-with-lease")
+    # -u sets upstream so the local branch and origin/<branch> show as one
+    # logical branch in GitHub Desktop / git tooling. No-op when already set.
+    cmd += ["-u", "origin", VANILLA_BRANCH]
     result = subprocess.run(
-        ["git", "push", "origin", VANILLA_BRANCH],
+        cmd,
         cwd=ROOT_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -408,7 +418,9 @@ def _push_vanilla_branch():
                 print(f"  {line}")
 
 
-def _update_vanilla_branch(tracking_files, message="Update vanilla GUI definitions"):
+def _update_vanilla_branch(tracking_files,
+                           message="Update vanilla GUI definitions",
+                           force_push=False):
     """Create or update the ``gui/vanilla`` branch via plumbing (no checkout).
 
     *tracking_files* maps relative paths to content strings.
@@ -451,7 +463,7 @@ def _update_vanilla_branch(tracking_files, message="Update vanilla GUI definitio
         if os.path.exists(tmp_index):
             os.remove(tmp_index)
 
-    _push_vanilla_branch()
+    _push_vanilla_branch(force=force_push)
     return commit
 
 # ─── Manifest ────────────────────────────────────────────────────────────────
@@ -772,7 +784,8 @@ def cmd_init(args):
     # 1. Create gui/vanilla orphan branch (via plumbing — no checkout)
     print(f"\nCreating {VANILLA_BRANCH} branch...")
     _update_vanilla_branch(vanilla_files,
-                           "Initialize vanilla GUI definitions")
+                           "Initialize vanilla GUI definitions",
+                           force_push=args.force)
 
     # 2. Merge into working branch (establishes common ancestor)
     print("Merging vanilla base into working branch...")
