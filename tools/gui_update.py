@@ -20,8 +20,10 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
+import time
 
 try:
     import tomllib
@@ -645,6 +647,30 @@ def _write_tracking_file(rel_path, content):
     with open(abs_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(content)
 
+
+def _force_rmtree(path):
+    """Remove a directory tree, retrying past Windows read-only files
+    and transient handle locks (OneDrive, antivirus, IDE indexer)."""
+    if not os.path.isdir(path):
+        return
+
+    def _on_exc(func, target, _exc):
+        try:
+            os.chmod(target, stat.S_IWRITE)
+        except OSError:
+            pass
+        for delay in (0.0, 0.25, 1.0):
+            if delay:
+                time.sleep(delay)
+            try:
+                func(target)
+                return
+            except OSError:
+                continue
+        func(target)
+
+    shutil.rmtree(path, onexc=_on_exc)
+
 # ─── Commands ────────────────────────────────────────────────────────────────
 
 def cmd_init(args):
@@ -675,8 +701,12 @@ def cmd_init(args):
                 run_git(["rm", "-rf", TRACKING_DIR_NAME])
                 run_git(["commit", "-m",
                          "Reset GUI tracking before re-initialization"])
+            # Untracked leftovers + empty dirs (git clean is Windows-friendlier
+            # than shutil for OneDrive-synced trees).
+            run_git(["clean", "-fdx", "--", TRACKING_DIR_NAME],
+                    check=False)
             if os.path.isdir(TRACKING_DIR):
-                shutil.rmtree(TRACKING_DIR)
+                _force_rmtree(TRACKING_DIR)
         if branch_exists:
             run_git(["branch", "-D", VANILLA_BRANCH])
 
