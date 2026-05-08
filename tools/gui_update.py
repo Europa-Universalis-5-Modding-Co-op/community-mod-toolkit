@@ -1,9 +1,16 @@
-"""GUI Update Helper — Track and merge vanilla GUI changes for EU5 mod overrides.
+"""GUI Update Helper. Track and merge vanilla GUI changes for EU5 mod overrides.
 
-Uses a git orphan branch (gui/vanilla) to store vanilla versions of overridden
-type, template, and widget definitions.  When vanilla updates, the branch is
-updated and merged into the working branch, letting git do a proper three-way
-merge.
+Uses two git refs to track vanilla state:
+
+* ``gui/vanilla``: branch holding the latest vanilla definitions. Advances
+  when ``merge`` detects a game update.
+* ``gui/vanilla-merged``: bookmark on the same chain pointing at the last
+  successfully merged vanilla commit. Used as the merge base for the next
+  three-way merge.
+
+Updates are merged per-file via ``git merge-file`` (three-way merge using
+explicit base/ours/theirs) so the result is a regular single-parent commit
+on the working branch instead of a multi-parent merge commit.
 
 Commands:
     init      Set up tracking for this mod
@@ -23,6 +30,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 try:
@@ -47,6 +55,7 @@ TRACKING_DIR = os.path.join(ROOT_DIR, *TRACKING_DIR_NAME.split("/"))
 MANIFEST_PATH = os.path.join(TRACKING_DIR, "manifest.json")
 MANIFEST_VERSION = 1
 VANILLA_BRANCH = "gui/vanilla"
+MERGED_BRANCH = "gui/vanilla-merged"
 
 STEAM_GAME_PATHS = [
     os.path.join("C:" + os.sep, "Steam", "steamapps", "common",
@@ -347,6 +356,27 @@ def _vanilla_branch_exists():
                    check=False) is not None
 
 
+def _vanilla_merged_ref_exists():
+    return run_git(["rev-parse", "--verify", MERGED_BRANCH],
+                   check=False) is not None
+
+
+def _ensure_vanilla_merged_ref():
+    """Initialize gui/vanilla-merged from gui/vanilla tip if missing.
+
+    Bootstraps the bookmark on first run after upgrading from the
+    older merge-commit design: at that point the working tree is
+    already reconciled against gui/vanilla's current tip, so that
+    tip is the correct base for the next three-way merge.
+    """
+    if _vanilla_merged_ref_exists():
+        return
+    if not _vanilla_branch_exists():
+        return
+    tip = run_git(["rev-parse", VANILLA_BRANCH])
+    run_git(["update-ref", f"refs/heads/{MERGED_BRANCH}", tip])
+
+
 def _has_merge_in_progress():
     return os.path.exists(os.path.join(ROOT_DIR, ".git", "MERGE_HEAD"))
 
@@ -386,24 +416,27 @@ def _read_from_branch(branch, path):
     return run_git(["show", f"{branch}:{path}"], check=False)
 
 
-def _push_vanilla_branch(force=False):
-    """Push VANILLA_BRANCH to origin if configured.  No-op for local-only repos.
+def _push_refs(refs, force=False):
+    """Push the given refs to origin if configured.  No-op for local-only repos.
 
     Failures (offline, auth, non-fast-forward) warn but don't abort.
     With ``force=True`` uses ``--force-with-lease`` so a fresh orphan from
     'init --force' replaces the stale remote tip without needing manual
     deletion. Lease still refuses if the remote moved unexpectedly.
     """
+    refs = [r for r in refs if r]
+    if not refs:
+        return
     if run_git(["remote", "get-url", "origin"], check=False) is None:
         return
-    print(f"Pushing {VANILLA_BRANCH} to origin"
+    print(f"Pushing {', '.join(refs)} to origin"
           f"{' (force-with-lease)' if force else ''}...")
     cmd = ["git", "push"]
     if force:
         cmd.append("--force-with-lease")
     # -u sets upstream so the local branch and origin/<branch> show as one
     # logical branch in GitHub Desktop / git tooling. No-op when already set.
-    cmd += ["-u", "origin", VANILLA_BRANCH]
+    cmd += ["-u", "origin"] + refs
     result = subprocess.run(
         cmd,
         cwd=ROOT_DIR,
@@ -412,7 +445,7 @@ def _push_vanilla_branch(force=False):
         text=True,
     )
     if result.returncode != 0:
-        print(f"  Warning: Failed to push {VANILLA_BRANCH}.")
+        print(f"  Warning: Failed to push {', '.join(refs)}.")
         if result.stderr:
             for line in result.stderr.strip().splitlines():
                 print(f"  {line}")
@@ -463,7 +496,7 @@ def _update_vanilla_branch(tracking_files,
         if os.path.exists(tmp_index):
             os.remove(tmp_index)
 
-    _push_vanilla_branch(force=force_push)
+    _push_refs([VANILLA_BRANCH], force=force_push)
     return commit
 
 # ─── Manifest ────────────────────────────────────────────────────────────────
@@ -683,6 +716,59 @@ def _force_rmtree(path):
 
     shutil.rmtree(path, onexc=_on_exc)
 
+
+def _three_way_merge_string(base, ours, theirs):
+    """Three-way merge of three string contents via ``git merge-file``.
+
+    Returns ``(merged_content, has_conflicts)``. Conflict regions are written
+    inline with the standard ``<<<<<<<`` / ``|||||||`` / ``=======`` /
+    ``>>>>>>>`` markers (zdiff3 style).
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        paths = {
+            "base": os.path.join(tmpdir, "base"),
+            "ours": os.path.join(tmpdir, "ours"),
+            "theirs": os.path.join(tmpdir, "theirs"),
+        }
+        for name, path in paths.items():
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                f.write({"base": base, "ours": ours, "theirs": theirs}[name])
+        result = subprocess.run(
+            ["git", "merge-file", "-p", "--zdiff3",
+             "--diff-algorithm=histogram",
+             "-L", "ours", "-L", "base", "-L", "theirs",
+             paths["ours"], paths["base"], paths["theirs"]],
+            cwd=ROOT_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode < 0:
+            print("Error: git merge-file failed.")
+            if result.stderr:
+                print(result.stderr.strip())
+            sys.exit(1)
+        return result.stdout, result.returncode > 0
+
+
+def _scan_unresolved_conflicts():
+    """Return a list of tracking files containing conflict markers."""
+    if not os.path.isdir(TRACKING_DIR):
+        return []
+    bad = []
+    for dirpath, _, filenames in os.walk(TRACKING_DIR):
+        for fname in filenames:
+            full = os.path.join(dirpath, fname)
+            try:
+                with open(full, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except (OSError, UnicodeDecodeError):
+                continue
+            if "<<<<<<<" in content and ">>>>>>>" in content:
+                rel = os.path.relpath(full, ROOT_DIR).replace(os.sep, "/")
+                bad.append(rel)
+    return bad
+
 # ─── Commands ────────────────────────────────────────────────────────────────
 
 def cmd_init(args):
@@ -721,6 +807,8 @@ def cmd_init(args):
                 _force_rmtree(TRACKING_DIR)
         if branch_exists:
             run_git(["branch", "-D", VANILLA_BRANCH])
+        if _vanilla_merged_ref_exists():
+            run_git(["branch", "-D", MERGED_BRANCH])
 
     # Scan
     print("Scanning mod GUI files...")
@@ -781,18 +869,19 @@ def cmd_init(args):
         header = _make_tracking_header(vd.source_file, md.source_file)
         vanilla_files[tp] = header + vd.text + "\n"
 
-    # 1. Create gui/vanilla orphan branch (via plumbing — no checkout)
+    # 1. Create gui/vanilla orphan branch (via plumbing, no checkout)
     print(f"\nCreating {VANILLA_BRANCH} branch...")
-    _update_vanilla_branch(vanilla_files,
-                           "Initialize vanilla GUI definitions",
-                           force_push=args.force)
+    new_vanilla_sha = _update_vanilla_branch(
+        vanilla_files,
+        "Initialize vanilla GUI definitions",
+        force_push=args.force)
 
-    # 2. Merge into working branch (establishes common ancestor)
-    print("Merging vanilla base into working branch...")
-    run_git(["merge", "--allow-unrelated-histories", "--no-commit",
-             VANILLA_BRANCH])
+    # 2. Set gui/vanilla-merged to point at the same commit so the next
+    #    merge has a valid base for three-way merging.
+    run_git(["update-ref", f"refs/heads/{MERGED_BRANCH}", new_vanilla_sha])
+    _push_refs([MERGED_BRANCH], force=args.force)
 
-    # 3. Overwrite with mod versions + add manifest
+    # 3. Write tracking files with mod content + manifest
     for md, vd in overrides:
         tp = _tracking_path(md.kind, md.name)
         header = _make_tracking_header(vd.source_file, md.source_file)
@@ -881,6 +970,25 @@ def cmd_merge(args):
     _ensure_clean_worktree()
     _ensure_no_merge()
     _ensure_rerere_enabled()
+    _ensure_vanilla_merged_ref()
+
+    # Auto-finalize: gui/vanilla advanced last run but the bookmark
+    # never caught up (user resolved conflicts and committed but did
+    # not re-run merge to finish). Refuse if conflict markers remain.
+    vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
+    merged_sha = run_git(["rev-parse", MERGED_BRANCH])
+    if vanilla_sha != merged_sha:
+        bad = _scan_unresolved_conflicts()
+        if bad:
+            print("Error: tracking files still contain conflict markers:")
+            for f in bad:
+                print(f"  {f}")
+            print("\nResolve conflicts and commit, then re-run merge.")
+            return 1
+        print(f"Finalizing previous merge: advancing {MERGED_BRANCH}.")
+        run_git(["update-ref",
+                 f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
+        _push_refs([MERGED_BRANCH])
 
     # Sync tracking from current mod state so OURS in the merge reflects
     # edits/deletions made since the last refresh.
@@ -946,7 +1054,7 @@ def cmd_merge(args):
     else:
         print("  Tracking already in sync with mod.")
 
-    # Update vanilla branch with current vanilla definitions
+    # Build the new vanilla snapshot from current game files.
     print("Scanning current vanilla GUI files...")
     vanilla_defs = _scan_definitions(game_dir, GUI_SOURCES)
     vanilla_map = {}
@@ -975,36 +1083,72 @@ def cmd_merge(args):
                     or _body_hash(old_content) != _body_hash(new_content)):
                 updated += 1
 
-    # Commits on gui/vanilla not yet reachable from HEAD indicate a
-    # previous merge that was aborted or never completed.
-    behind_vanilla = int(run_git(
-        ["rev-list", "--count", f"HEAD..{VANILLA_BRANCH}"],
-        check=False) or "0")
-
-    if updated == 0 and behind_vanilla == 0:
+    if updated == 0:
         print("Vanilla branch already up to date. Nothing to merge.")
         return 0
 
-    if updated > 0:
-        print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) changed)...")
-        _update_vanilla_branch(
-            tracking_files,
-            f"Update {updated} vanilla GUI definition(s)")
-    else:
-        print(f"{VANILLA_BRANCH} has unmerged commits from a previous "
-              "run; resuming merge.")
+    print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) changed)...")
+    new_vanilla_sha = _update_vanilla_branch(
+        tracking_files,
+        f"Update {updated} vanilla GUI definition(s)")
 
-    print(f"Merging {VANILLA_BRANCH} into current branch...")
-    run_git(["-c", "merge.conflictstyle=zdiff3",
-             "merge", VANILLA_BRANCH, "--no-commit", "--no-ff",
-             "-Xignore-all-space", "-Xdiff-algorithm=histogram"],
-            check=False)
+    # Per-file three-way merge. base = gui/vanilla-merged, theirs =
+    # gui/vanilla, ours = working tree. Result writes back to working
+    # tree (with conflict markers if needed) producing a regular
+    # single-parent commit instead of a merge commit.
+    print("Merging into working tree...")
+    conflicts = []
+    merged_count = 0
+    for key, entry in manifest["definitions"].items():
+        tp = entry["tracking_path"]
+        abs_tp = os.path.join(ROOT_DIR, tp.replace("/", os.sep))
 
-    # Check for conflicts
-    conflict_out = run_git(["diff", "--name-only", "--diff-filter=U"],
-                           check=False) or ""
-    conflicts = [f for f in conflict_out.splitlines()
-                 if f.startswith(TRACKING_DIR_NAME + "/")]
+        base = _read_from_branch(MERGED_BRANCH, tp)
+        theirs = _read_from_branch(VANILLA_BRANCH, tp)
+        ours = None
+        if os.path.isfile(abs_tp):
+            with open(abs_tp, "r", encoding="utf-8") as f:
+                ours = f.read()
+
+        if base is not None:
+            base = base.replace("\r\n", "\n")
+            if not base.endswith("\n"):
+                base += "\n"
+        if theirs is not None:
+            theirs = theirs.replace("\r\n", "\n")
+            if not theirs.endswith("\n"):
+                theirs += "\n"
+        if ours is not None:
+            ours = ours.replace("\r\n", "\n")
+
+        if theirs is None:
+            # Vanilla removed this definition.
+            if base is None or ours is None:
+                continue
+            if _body_hash(ours) == _body_hash(base):
+                if os.path.isfile(abs_tp):
+                    os.remove(abs_tp)
+                merged_count += 1
+            else:
+                print(f"  Conflict: {tp} (vanilla removed; mod modified)")
+                conflicts.append(tp)
+            continue
+
+        if base is None:
+            base = ""
+        if ours is None:
+            ours = ""
+
+        if base == ours == theirs:
+            continue
+
+        merged, has_conflict = _three_way_merge_string(base, ours, theirs)
+        if merged != ours:
+            _write_tracking_file(tp, merged)
+        if has_conflict:
+            conflicts.append(tp)
+        elif merged != ours:
+            merged_count += 1
 
     if conflicts:
         print(f"\nConflicts in {len(conflicts)} file(s):")
@@ -1013,16 +1157,28 @@ def cmd_merge(args):
         print(f"\nResolve conflicts in {TRACKING_DIR_NAME}/, then:")
         print(f"  git add {TRACKING_DIR_NAME}/")
         print("  git commit")
-        print("  python tools/gui_update.py apply")
+        print("  python tools/gui_update.py merge   # finalizes the merge")
         return 1
 
-    if _has_merge_in_progress():
+    # Stage and commit if there are changes.
+    run_git(["add", TRACKING_DIR_NAME + "/"])
+    diff_check = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=ROOT_DIR,
+    )
+    if diff_check.returncode != 0:
         run_git(["commit", "-m",
-                 f"Merge vanilla GUI updates ({updated} definition(s))"])
-        print(f"\nMerge completed cleanly ({updated} definition(s) updated).")
+                 f"Update {merged_count} vanilla GUI definition(s)"])
+
+    # Advance the bookmark to match gui/vanilla.
+    run_git(["update-ref",
+             f"refs/heads/{MERGED_BRANCH}", new_vanilla_sha])
+    _push_refs([MERGED_BRANCH])
+
+    if merged_count:
+        print(f"\nMerge completed cleanly ({merged_count} definition(s) updated).")
     else:
         print("\nMerge completed (no file-level changes).")
-
     print("Run 'gui_update.py apply' to sync changes to mod GUI files.")
     return 0
 
@@ -1230,8 +1386,13 @@ def cmd_refresh(args):
                 entry["vanilla_file"], entry["mod_file"])
             vanilla_files[entry["tracking_path"]] = (
                 header + vd.text + "\n")
-    _update_vanilla_branch(vanilla_files,
-                           "Refresh vanilla GUI definitions")
+    new_vanilla_sha = _update_vanilla_branch(
+        vanilla_files, "Refresh vanilla GUI definitions")
+
+    # Refresh re-baselines tracking, so the bookmark moves to the new tip.
+    run_git(["update-ref",
+             f"refs/heads/{MERGED_BRANCH}", new_vanilla_sha])
+    _push_refs([MERGED_BRANCH])
 
     print(f"\nRefreshed: {len(new_set)} definition(s) tracked.")
     if added or removed:
@@ -1250,6 +1411,13 @@ def cmd_status(args):
     print("GUI Update Tracking Status")
     print(f"  Vanilla branch: "
           f"{'OK' if _vanilla_branch_exists() else 'MISSING'}")
+    if _vanilla_branch_exists() and _vanilla_merged_ref_exists():
+        v = run_git(["rev-parse", VANILLA_BRANCH])
+        m = run_git(["rev-parse", MERGED_BRANCH])
+        print(f"  Merge bookmark:  "
+              f"{'in sync' if v == m else 'pending merge'}")
+    elif _vanilla_branch_exists():
+        print(f"  Merge bookmark:  MISSING (will init on next merge)")
     print(f"  Tracked definitions: {len(defs)}")
 
     if not defs:
@@ -1316,8 +1484,8 @@ def main():
     init_parser.add_argument(
         "--force", action="store_true",
         help="Reset existing tracking state (deletes "
-             f"{TRACKING_DIR_NAME}/ and {VANILLA_BRANCH}) "
-             "before re-initializing.",
+             f"{TRACKING_DIR_NAME}/, {VANILLA_BRANCH}, and "
+             f"{MERGED_BRANCH}) before re-initializing.",
     )
     sub.add_parser("check",
                    help="Check for vanilla GUI changes")
