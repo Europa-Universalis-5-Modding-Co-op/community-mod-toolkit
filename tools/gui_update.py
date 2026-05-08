@@ -407,8 +407,15 @@ def _ensure_no_merge():
 
 
 def _read_from_branch(branch, path):
-    """Read a file from *branch* without switching.  Returns content or ``None``."""
-    return run_git(["show", f"{branch}:{path}"], check=False)
+    """Read a file from *branch* without switching.  Returns content or ``None``.
+
+    Strips a leading UTF-8 BOM if present so callers compare textual
+    content without the BOM byte affecting hashes or merge inputs.
+    """
+    content = run_git(["show", f"{branch}:{path}"], check=False)
+    if content is not None and content.startswith("﻿"):
+        content = content[1:]
+    return content
 
 
 def _push_refs(refs, force=False):
@@ -681,17 +688,22 @@ def _body_hash(content):
 
 
 def _write_tracking_file(rel_path, content):
-    """Write a tracking file under ROOT_DIR.
+    """Write a tracking file under ROOT_DIR with UTF-8 BOM + CRLF.
 
-    Writes CRLF to match the ``eol=crlf`` .gitattributes rule on
-    tracking files, and skips the write when on-disk bytes already
-    match so refreshes that produce no real change don't churn mtime
-    or flip line endings.
+    BOM matches what editors produce when users save resolved
+    merges, so all tracking blobs share one encoding. Without it,
+    BOM-less script blobs and BOM-prefixed editor blobs differ on
+    every byte for textually-identical content, making any diff
+    that crosses the boundary render as a whole-file replacement
+    in git GUIs. Skips the write when on-disk bytes already match.
     """
     abs_path = os.path.join(ROOT_DIR, rel_path.replace("/", os.sep))
     os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    if content.startswith("﻿"):
+        content = content[1:]
     normalized = content.replace("\r\n", "\n").replace("\r", "\n")
-    new_bytes = normalized.replace("\n", "\r\n").encode("utf-8")
+    new_bytes = (b"\xef\xbb\xbf"
+                 + normalized.replace("\n", "\r\n").encode("utf-8"))
     if os.path.exists(abs_path):
         with open(abs_path, "rb") as f:
             if f.read() == new_bytes:
@@ -770,7 +782,7 @@ def _scan_unresolved_conflicts():
         for fname in filenames:
             full = os.path.join(dirpath, fname)
             try:
-                with open(full, "r", encoding="utf-8") as f:
+                with open(full, "r", encoding="utf-8-sig") as f:
                     content = f.read()
             except (OSError, UnicodeDecodeError):
                 continue
@@ -1090,6 +1102,7 @@ def cmd_merge(args):
     head_already_merged = vanilla_sha != merged_sha and (
         run_git(["merge-base", "--is-ancestor", vanilla_sha, "HEAD"],
                 check=False) is not None)
+    just_flattened = False
     if vanilla_sha != merged_sha and _head_is_vanilla_merge(vanilla_sha):
         bad = _scan_unresolved_conflicts()
         if bad:
@@ -1111,6 +1124,7 @@ def cmd_merge(args):
         if current_branch:
             _push_refs([current_branch], force=True)
         merged_sha = vanilla_sha
+        just_flattened = True
     elif head_already_merged:
         # HEAD has gui/vanilla in its ancestry but isn't itself the merge
         # commit (extra commits like apply output landed on top). The
@@ -1123,68 +1137,74 @@ def cmd_merge(args):
         merged_sha = vanilla_sha
 
     # Sync tracking from current mod state so OURS in the merge reflects
-    # edits/deletions made since the last refresh.
-    print("Syncing tracking files from current mod content...")
-    mod_defs = _scan_definitions(ROOT_DIR, GUI_SOURCES)
-    mod_map = {}
-    mod_consts = {}
-    for d in mod_defs:
-        if d.kind == "constant":
-            mod_consts.setdefault((d.source_file, d.name), d)
-        else:
-            mod_map.setdefault(_tracking_key(d.kind, d.name), d)
-
-    synced = 0
-    removed_keys = []
-    new_definitions = {}
-    for key, entry in manifest["definitions"].items():
-        if key.startswith("constant:"):
-            md = mod_consts.get((entry["mod_file"], entry["name"]))
-        else:
-            md = mod_map.get(key)
-        if md is not None:
-            if (not key.startswith("constant:")
-                    and entry["mod_file"] != md.source_file):
-                entry["mod_file"] = md.source_file
-            new_definitions[key] = entry
-            tp = entry["tracking_path"]
-            header = _make_tracking_header(
-                entry["vanilla_file"], entry["mod_file"])
-            new_text = header + md.text + "\n"
-            abs_tp = os.path.join(ROOT_DIR, tp.replace("/", os.sep))
-            old_text = None
-            if os.path.isfile(abs_tp):
-                with open(abs_tp, "r", encoding="utf-8") as f:
-                    old_text = f.read()
-            if old_text != new_text:
-                _write_tracking_file(tp, new_text)
-                synced += 1
-        else:
-            removed_keys.append(key)
-            abs_tp = os.path.join(
-                ROOT_DIR, entry["tracking_path"].replace("/", os.sep))
-            if os.path.isfile(abs_tp):
-                os.remove(abs_tp)
-
-    if synced or removed_keys:
-        manifest["definitions"] = new_definitions
-        _save_manifest(manifest)
-        run_git(["add", "-A", TRACKING_DIR_NAME + "/"])
-        parts = []
-        if synced:
-            parts.append(f"{synced} updated")
-        if removed_keys:
-            parts.append(f"{len(removed_keys)} removed")
-        run_git(["commit", "-m",
-                 "Sync tracking from mod state: " + ", ".join(parts)])
-        if synced:
-            print(f"  {synced} tracking file(s) updated.")
-        if removed_keys:
-            print(f"  {len(removed_keys)} stale entry(ies) removed:")
-            for k in removed_keys:
-                print(f"    - {k}")
+    # edits/deletions made since the last refresh. Skip after a flatten:
+    # the resolution is in tracking and mod files are still stale, so
+    # re-deriving from mod would revert the resolution.
+    if just_flattened:
+        print("Skipping mod-state sync (tracking is authoritative "
+              "after flatten).")
     else:
-        print("  Tracking already in sync with mod.")
+        print("Syncing tracking files from current mod content...")
+        mod_defs = _scan_definitions(ROOT_DIR, GUI_SOURCES)
+        mod_map = {}
+        mod_consts = {}
+        for d in mod_defs:
+            if d.kind == "constant":
+                mod_consts.setdefault((d.source_file, d.name), d)
+            else:
+                mod_map.setdefault(_tracking_key(d.kind, d.name), d)
+
+        synced = 0
+        removed_keys = []
+        new_definitions = {}
+        for key, entry in manifest["definitions"].items():
+            if key.startswith("constant:"):
+                md = mod_consts.get((entry["mod_file"], entry["name"]))
+            else:
+                md = mod_map.get(key)
+            if md is not None:
+                if (not key.startswith("constant:")
+                        and entry["mod_file"] != md.source_file):
+                    entry["mod_file"] = md.source_file
+                new_definitions[key] = entry
+                tp = entry["tracking_path"]
+                header = _make_tracking_header(
+                    entry["vanilla_file"], entry["mod_file"])
+                new_text = header + md.text + "\n"
+                abs_tp = os.path.join(ROOT_DIR, tp.replace("/", os.sep))
+                old_text = None
+                if os.path.isfile(abs_tp):
+                    with open(abs_tp, "r", encoding="utf-8-sig") as f:
+                        old_text = f.read()
+                if old_text != new_text:
+                    _write_tracking_file(tp, new_text)
+                    synced += 1
+            else:
+                removed_keys.append(key)
+                abs_tp = os.path.join(
+                    ROOT_DIR, entry["tracking_path"].replace("/", os.sep))
+                if os.path.isfile(abs_tp):
+                    os.remove(abs_tp)
+
+        if synced or removed_keys:
+            manifest["definitions"] = new_definitions
+            _save_manifest(manifest)
+            run_git(["add", "-A", TRACKING_DIR_NAME + "/"])
+            parts = []
+            if synced:
+                parts.append(f"{synced} updated")
+            if removed_keys:
+                parts.append(f"{len(removed_keys)} removed")
+            run_git(["commit", "-m",
+                     "Sync tracking from mod state: " + ", ".join(parts)])
+            if synced:
+                print(f"  {synced} tracking file(s) updated.")
+            if removed_keys:
+                print(f"  {len(removed_keys)} stale entry(ies) removed:")
+                for k in removed_keys:
+                    print(f"    - {k}")
+        else:
+            print("  Tracking already in sync with mod.")
 
     # Build the new vanilla snapshot from current game files.
     print("Scanning current vanilla GUI files...")
@@ -1251,7 +1271,7 @@ def cmd_merge(args):
         theirs = _read_from_branch(VANILLA_BRANCH, tp)
         ours = None
         if os.path.isfile(abs_tp):
-            with open(abs_tp, "r", encoding="utf-8") as f:
+            with open(abs_tp, "r", encoding="utf-8-sig") as f:
                 ours = f.read()
 
         if base is not None:
@@ -1366,7 +1386,7 @@ def cmd_apply(args):
             print(f"  Warning: Tracking file missing: {tp}")
             continue
 
-        with open(abs_tp, "r", encoding="utf-8") as f:
+        with open(abs_tp, "r", encoding="utf-8-sig") as f:
             new_text = _strip_tracking_header(f.read()).rstrip("\n")
 
         if key.startswith("constant:"):
