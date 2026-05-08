@@ -14,8 +14,8 @@ Merging is per-file via ``git merge-file`` with the explicit base from
 the git index with stages 1/2/3 and writes ``.git/MERGE_HEAD`` so any
 git GUI sees a real merge in progress and offers a 3-way merge editor.
 Once the user resolves and commits the resulting merge commit, the
-next merge run advances ``gui/vanilla-merged`` to match ``gui/vanilla``
-so the merge is recognized as absorbed.
+next ``apply`` (or ``merge``) run advances ``gui/vanilla-merged`` to
+match ``gui/vanilla`` so the merge is recognized as absorbed.
 
 Commands:
     init      Set up tracking for this mod
@@ -792,6 +792,42 @@ def _scan_unresolved_conflicts():
     return bad
 
 
+def _advance_merged_ref_if_absorbed():
+    """Advance ``gui/vanilla-merged`` to ``gui/vanilla`` when HEAD has
+    already absorbed the merge.
+
+    Detects the post-resolve state (the user committed the merge but
+    the bookmark hasn't moved yet) and fixes it. Called from both
+    ``cmd_merge`` and ``cmd_apply`` so users don't need to invoke
+    merge a second time after resolving conflicts. Exits with status
+    1 if tracking files still contain conflict markers. Returns
+    True when the bookmark was advanced, False otherwise.
+    """
+    if not _vanilla_branch_exists() or not _vanilla_merged_ref_exists():
+        return False
+    vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
+    merged_sha = run_git(["rev-parse", MERGED_BRANCH])
+    if vanilla_sha == merged_sha:
+        return False
+    if run_git(["merge-base", "--is-ancestor", vanilla_sha, "HEAD"],
+               check=False) is None:
+        return False
+    bad = _scan_unresolved_conflicts()
+    if bad:
+        print("Error: tracking files contain conflict markers:")
+        for f in bad:
+            print(f"  {f}")
+        print("\nFix the markers, re-stage, and amend the commit, "
+              "then re-run.")
+        sys.exit(1)
+    print("Advancing gui/vanilla-merged bookmark "
+          "(gui/vanilla already in HEAD's ancestry)...")
+    run_git(["update-ref",
+             f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
+    _push_refs([MERGED_BRANCH])
+    return True
+
+
 def _setup_merge_state(merge_head_sha, merge_msg):
     """Write ``.git/MERGE_HEAD``, ``.git/MERGE_MSG``, and ``ORIG_HEAD``
     so git and any git GUI recognize a merge in progress and offer a
@@ -1032,7 +1068,7 @@ def cmd_check(args):
         if pending_merge:
             print("\nPrevious merge is unfinished "
                   f"({VANILLA_BRANCH} is ahead of {MERGED_BRANCH}).")
-            print("Run 'gui_update.py merge' to resume.")
+            print("Run 'gui_update.py apply' to finalize.")
         else:
             print("\nAll tracked definitions are up to date with vanilla.")
         return 0
@@ -1067,32 +1103,9 @@ def cmd_merge(args):
     _ensure_no_merge()
     _ensure_vanilla_merged_ref()
 
-    # If gui/vanilla is already in HEAD's ancestry (the user committed
-    # the merge, possibly with later commits like apply output on top),
-    # advance the bookmark to the vanilla tip so the next three-way
-    # merge has the right base, and skip re-merging.
+    just_advanced = _advance_merged_ref_if_absorbed()
     vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
     merged_sha = run_git(["rev-parse", MERGED_BRANCH])
-    head_already_merged = vanilla_sha != merged_sha and (
-        run_git(["merge-base", "--is-ancestor", vanilla_sha, "HEAD"],
-                check=False) is not None)
-    just_advanced = False
-    if head_already_merged:
-        bad = _scan_unresolved_conflicts()
-        if bad:
-            print("Error: tracking files contain conflict markers:")
-            for f in bad:
-                print(f"  {f}")
-            print("\nFix the markers, re-stage, and amend the commit, "
-                  "then re-run merge.")
-            return 1
-        print("Advancing gui/vanilla-merged bookmark "
-              "(gui/vanilla already in HEAD's ancestry)...")
-        run_git(["update-ref",
-                 f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
-        _push_refs([MERGED_BRANCH])
-        merged_sha = vanilla_sha
-        just_advanced = True
 
     # Sync tracking from current mod state so OURS in the merge reflects
     # edits/deletions made since the last refresh. Skip after advancing
@@ -1290,10 +1303,8 @@ def cmd_merge(args):
         print(f"\nConflicts in {len(conflicts)} file(s):")
         for tp, _, _, _ in conflicts:
             print(f"  {tp}")
-        print("\nResolve the conflicts in your merge tool of choice, then:")
-        print(f"  git add {TRACKING_DIR_NAME}/")
-        print("  git commit")
-        print("  python tools/gui_update.py merge   # advances bookmark")
+        print("\nResolve the conflicts in your merge tool of choice, then run:")
+        print("  python tools/gui_update.py apply")
         return 1
 
     # No conflicts: stage and commit as a regular single-parent commit.
@@ -1327,6 +1338,8 @@ def cmd_apply(args):
     if _has_merge_in_progress():
         print("Error: Merge in progress. Resolve conflicts and commit first.")
         return 1
+
+    _advance_merged_ref_if_absorbed()
 
     applied = 0
     errors = 0
