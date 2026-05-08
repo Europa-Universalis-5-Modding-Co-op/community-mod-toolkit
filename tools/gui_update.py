@@ -372,6 +372,28 @@ def _read_from_branch(branch, path):
     return run_git(["show", f"{branch}:{path}"], check=False)
 
 
+def _push_vanilla_branch():
+    """Push VANILLA_BRANCH to origin if configured.  No-op for local-only repos.
+
+    Failures (offline, auth, non-fast-forward) warn but don't abort.
+    """
+    if run_git(["remote", "get-url", "origin"], check=False) is None:
+        return
+    print(f"Pushing {VANILLA_BRANCH} to origin...")
+    result = subprocess.run(
+        ["git", "push", "origin", VANILLA_BRANCH],
+        cwd=ROOT_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"  Warning: Failed to push {VANILLA_BRANCH}.")
+        if result.stderr:
+            for line in result.stderr.strip().splitlines():
+                print(f"  {line}")
+
+
 def _update_vanilla_branch(tracking_files, message="Update vanilla GUI definitions"):
     """Create or update the ``gui/vanilla`` branch via plumbing (no checkout).
 
@@ -411,10 +433,12 @@ def _update_vanilla_branch(tracking_files, message="Update vanilla GUI definitio
         commit = run_git(
             ["commit-tree", tree_sha] + parent_args + ["-m", message])
         run_git(["update-ref", f"refs/heads/{VANILLA_BRANCH}", commit])
-        return commit
     finally:
         if os.path.exists(tmp_index):
             os.remove(tmp_index)
+
+    _push_vanilla_branch()
+    return commit
 
 # ─── Manifest ────────────────────────────────────────────────────────────────
 
