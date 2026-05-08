@@ -756,7 +756,11 @@ def _three_way_merge_string(base, ours, theirs):
             if result.stderr:
                 print(result.stderr.strip())
             sys.exit(1)
-        return result.stdout, result.returncode > 0
+        # Check the output for conflict markers rather than relying on the
+        # exit code: with --ignore-all-space, merge-file can return non-zero
+        # while still producing clean auto-resolved output.
+        has_conflict = "<<<<<<<" in result.stdout
+        return result.stdout, has_conflict
 
 
 def _scan_unresolved_conflicts():
