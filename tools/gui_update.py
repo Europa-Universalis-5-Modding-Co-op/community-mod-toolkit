@@ -9,6 +9,12 @@ Uses two git refs to track vanilla state:
   per-file three-way merges so the merge result does not depend on git's
   parent-link auto-detection.
 
+Requires ``tools/dependencies/gui-tracking/** -text`` in .gitattributes so
+blobs from script writes and from merge-tool resolution share one
+encoding. Without it, the repo's eol=crlf rule normalizes script-written
+files to LF in the blob while editor-resolved files stay CRLF, and any
+cross-boundary diff renders as a whole-file replacement in git GUIs.
+
 Merging is per-file via ``git merge-file`` with the explicit base from
 ``gui/vanilla-merged``. When a file conflicts the script also populates
 the git index with stages 1/2/3 and writes ``.git/MERGE_HEAD`` so any
