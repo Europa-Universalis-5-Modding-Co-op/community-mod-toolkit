@@ -690,11 +690,23 @@ def _body_hash(content):
 
 
 def _write_tracking_file(rel_path, content):
-    """Write a tracking file under ROOT_DIR."""
+    """Write a tracking file under ROOT_DIR.
+
+    Writes CRLF to match the ``eol=crlf`` .gitattributes rule on
+    tracking files, and skips the write when on-disk bytes already
+    match so refreshes that produce no real change don't churn mtime
+    or flip line endings.
+    """
     abs_path = os.path.join(ROOT_DIR, rel_path.replace("/", os.sep))
     os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-    with open(abs_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(content)
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    new_bytes = normalized.replace("\n", "\r\n").encode("utf-8")
+    if os.path.exists(abs_path):
+        with open(abs_path, "rb") as f:
+            if f.read() == new_bytes:
+                return
+    with open(abs_path, "wb") as f:
+        f.write(new_bytes)
 
 
 def _force_rmtree(path):
