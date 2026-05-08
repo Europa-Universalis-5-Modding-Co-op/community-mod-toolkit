@@ -742,7 +742,7 @@ def _three_way_merge_string(base, ours, theirs):
                 f.write({"base": base, "ours": ours, "theirs": theirs}[name])
         result = subprocess.run(
             ["git", "merge-file", "-p", "--zdiff3",
-             "--diff-algorithm=histogram", "--ignore-all-space",
+             "--diff-algorithm=histogram",
              "-L", "ours", "-L", "base", "-L", "theirs",
              paths["ours"], paths["base"], paths["theirs"]],
             cwd=ROOT_DIR,
@@ -751,14 +751,12 @@ def _three_way_merge_string(base, ours, theirs):
             text=True,
             encoding="utf-8",
         )
-        if result.returncode < 0:
+        if result.returncode < 0 or (
+                not result.stdout and (base or ours or theirs)):
             print("Error: git merge-file failed.")
             if result.stderr:
                 print(result.stderr.strip())
             sys.exit(1)
-        # Check the output for conflict markers rather than relying on the
-        # exit code: with --ignore-all-space, merge-file can return non-zero
-        # while still producing clean auto-resolved output.
         has_conflict = "<<<<<<<" in result.stdout
         return result.stdout, has_conflict
 
