@@ -327,6 +327,7 @@ def run_git(args, cwd=ROOT_DIR, check=True, env=None):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             check=check,
             env=run_env,
         )
@@ -351,6 +352,7 @@ def _git_hash_object(content):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     return result.stdout.strip()
