@@ -11,11 +11,11 @@ Uses two git refs to track vanilla state:
 
 Merging is per-file via ``git merge-file`` with the explicit base from
 ``gui/vanilla-merged``. When a file conflicts the script also populates
-the git index with stages 1/2/3 and writes ``.git/MERGE_HEAD`` so VSCode
-(and other git GUIs) see a real merge in progress and offer the 3-way
-merge editor. Once the user resolves and commits, the resulting merge
-commit is flattened into a single-parent commit on the next run so
-github desktop diffs stay clean.
+the git index with stages 1/2/3 and writes ``.git/MERGE_HEAD`` so any
+git GUI sees a real merge in progress and offers a 3-way merge editor.
+Once the user resolves and commits, the resulting merge commit is
+flattened into a single-parent commit on the next run so git history
+tools render normal linear commits.
 
 Commands:
     init      Set up tracking for this mod
@@ -369,10 +369,9 @@ def _vanilla_merged_ref_exists():
 def _ensure_vanilla_merged_ref():
     """Initialize gui/vanilla-merged from gui/vanilla tip if missing.
 
-    Bootstraps the bookmark on first run after upgrading from the
-    older merge-commit design: at that point the working tree is
-    already reconciled against gui/vanilla's current tip, so that
-    tip is the correct base for the next three-way merge.
+    When the bookmark is absent, the working tree is already
+    reconciled against gui/vanilla's current tip, so that tip is
+    the correct base for the next three-way merge.
     """
     if _vanilla_merged_ref_exists():
         return
@@ -440,7 +439,7 @@ def _push_refs(refs, force=False):
     if force:
         cmd.append("--force-with-lease")
     # -u sets upstream so the local branch and origin/<branch> show as one
-    # logical branch in GitHub Desktop / git tooling. No-op when already set.
+    # logical branch in git history tools. No-op when already set.
     cmd += ["-u", "origin"] + refs
     result = subprocess.run(
         cmd,
@@ -794,7 +793,7 @@ def _flatten_head_merge_commit():
     Soft-resets to first parent (preserving index + working tree), then
     re-commits with the same message and tree. Net result: identical
     content, but history shows a normal linear commit instead of a
-    2-parent merge so github desktop diffs read cleanly.
+    2-parent merge so diff tools render it as a normal commit.
     """
     msg = run_git(["log", "-1", "--pretty=%B", "HEAD"]) or "Update vanilla GUI definitions"
     run_git(["reset", "--soft", "HEAD^1"])
@@ -803,9 +802,9 @@ def _flatten_head_merge_commit():
 
 def _setup_merge_state(merge_head_sha, merge_msg):
     """Write ``.git/MERGE_HEAD``, ``.git/MERGE_MSG``, and ``ORIG_HEAD``
-    so git/VSCode recognize a merge in progress and offer the 3-way
-    merge editor. ``ORIG_HEAD`` lets ``git merge --abort`` work to back
-    out of the attempt cleanly.
+    so git and any git GUI recognize a merge in progress and offer a
+    3-way merge editor. ``ORIG_HEAD`` lets ``git merge --abort`` work
+    to back out of the attempt cleanly.
     """
     git_dir = os.path.join(ROOT_DIR, ".git")
     head_sha = run_git(["rev-parse", "HEAD"])
@@ -821,7 +820,7 @@ def _setup_merge_state(merge_head_sha, merge_msg):
 
 def _stage_merge_entries(path, base_content, ours_content, theirs_content):
     """Populate index stages 1/2/3 for ``path`` so git treats the file
-    as conflicted (which is what VSCode's merge editor keys off).
+    as conflicted (which is what merge editors key off).
 
     ``--force-remove`` clears the existing stage 0 entry regardless of
     whether the file exists in the working tree; plain ``--remove`` is
@@ -907,7 +906,7 @@ def cmd_init(args):
     constants = _link_constants(mod_defs, vanilla_defs, overrides)
     total = len(overrides) + len(constants)
     if not total:
-        print("\nNo overrides detected — your mod does not override "
+        print("\nNo overrides detected. Your mod does not override "
               "any vanilla GUI types, templates, widgets, or constants.")
         return 0
 
@@ -1214,9 +1213,9 @@ def cmd_merge(args):
 
     # Per-file three-way merge with explicit base ``gui/vanilla-merged``
     # and theirs ``gui/vanilla``. Doing this manually (rather than via
-    # ``git merge``) lets us flatten the final commit to a single parent
-    # without breaking base detection on the next run, since the next
-    # base comes from the bookmark ref and not from git ancestry.
+    # ``git merge``) allows flattening the final commit to a single
+    # parent without breaking base detection on the next run, since the
+    # next base comes from the bookmark ref and not from git ancestry.
     print("Running three-way merge...")
     conflicts = []
     clean_paths = []
@@ -1275,8 +1274,8 @@ def cmd_merge(args):
         # Stage the clean files normally.
         for tp in clean_paths:
             run_git(["add", tp])
-        # Stage conflicting files at stages 1/2/3 so VSCode (and any git
-        # GUI) sees a real merge conflict and offers the 3-way editor.
+        # Stage conflicting files at stages 1/2/3 so git GUIs see a real
+        # merge conflict and offer their 3-way merge editor.
         for tp, base, ours, theirs in conflicts:
             _stage_merge_entries(tp, base, ours, theirs)
         # Set MERGE_HEAD/MERGE_MSG so ``git status`` shows a merge in
@@ -1288,9 +1287,7 @@ def cmd_merge(args):
         print(f"\nConflicts in {len(conflicts)} file(s):")
         for tp, _, _, _ in conflicts:
             print(f"  {tp}")
-        print("\nResolve in VSCode (right-click a conflicted file in the")
-        print("Source Control panel and choose 'Open in Merge Editor'),")
-        print("or in any merge tool, then:")
+        print("\nResolve the conflicts in your merge tool of choice, then:")
         print(f"  git add {TRACKING_DIR_NAME}/")
         print("  git commit")
         print("  python tools/gui_update.py merge   # flattens + finalizes")
