@@ -367,6 +367,17 @@ def _ensure_no_merge():
         sys.exit(1)
 
 
+def _ensure_rerere_enabled():
+    """Turn on rerere so resolved conflicts get replayed on re-runs."""
+    if run_git(["config", "--get", "rerere.enabled"],
+               check=False) == "true":
+        return
+    run_git(["config", "rerere.enabled", "true"])
+    print("Enabled rerere in this repo (replays prior conflict "
+          "resolutions; undo a bad replay with "
+          "'git rerere forget <path>').")
+
+
 def _read_from_branch(branch, path):
     """Read a file from *branch* without switching.  Returns content or ``None``."""
     return run_git(["show", f"{branch}:{path}"], check=False)
@@ -807,6 +818,7 @@ def cmd_merge(args):
 
     _ensure_clean_worktree()
     _ensure_no_merge()
+    _ensure_rerere_enabled()
 
     # Sync tracking from current mod state so OURS in the merge reflects
     # edits/deletions made since the last refresh.
@@ -901,18 +913,30 @@ def cmd_merge(args):
                     or _body_hash(old_content) != _body_hash(new_content)):
                 updated += 1
 
-    if updated == 0:
+    # Commits on gui/vanilla not yet reachable from HEAD indicate a
+    # previous merge that was aborted or never completed.
+    behind_vanilla = int(run_git(
+        ["rev-list", "--count", f"HEAD..{VANILLA_BRANCH}"],
+        check=False) or "0")
+
+    if updated == 0 and behind_vanilla == 0:
         print("Vanilla branch already up to date. Nothing to merge.")
         return 0
 
-    print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) changed)...")
-    _update_vanilla_branch(
-        tracking_files,
-        f"Update {updated} vanilla GUI definition(s)")
+    if updated > 0:
+        print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) changed)...")
+        _update_vanilla_branch(
+            tracking_files,
+            f"Update {updated} vanilla GUI definition(s)")
+    else:
+        print(f"{VANILLA_BRANCH} has unmerged commits from a previous "
+              "run; resuming merge.")
 
-    # Start merge
     print(f"Merging {VANILLA_BRANCH} into current branch...")
-    run_git(["merge", VANILLA_BRANCH, "--no-commit", "--no-ff"], check=False)
+    run_git(["-c", "merge.conflictstyle=zdiff3",
+             "merge", VANILLA_BRANCH, "--no-commit", "--no-ff",
+             "-Xignore-all-space", "-Xdiff-algorithm=histogram"],
+            check=False)
 
     # Check for conflicts
     conflict_out = run_git(["diff", "--name-only", "--diff-filter=U"],
