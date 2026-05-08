@@ -742,7 +742,7 @@ def _three_way_merge_string(base, ours, theirs):
                 f.write({"base": base, "ours": ours, "theirs": theirs}[name])
         result = subprocess.run(
             ["git", "merge-file", "-p", "--zdiff3",
-             "--diff-algorithm=histogram",
+             "--diff-algorithm=minimal",
              "-L", "ours", "-L", "base", "-L", "theirs",
              paths["ours"], paths["base"], paths["theirs"]],
             cwd=ROOT_DIR,
