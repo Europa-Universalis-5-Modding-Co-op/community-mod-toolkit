@@ -821,8 +821,14 @@ def _setup_merge_state(merge_head_sha, merge_msg):
 
 def _stage_merge_entries(path, base_content, ours_content, theirs_content):
     """Populate index stages 1/2/3 for ``path`` so git treats the file
-    as conflicted (which is what VSCode's merge editor keys off)."""
-    run_git(["update-index", "--remove", path], check=False)
+    as conflicted (which is what VSCode's merge editor keys off).
+
+    ``--force-remove`` clears the existing stage 0 entry regardless of
+    whether the file exists in the working tree; plain ``--remove`` is
+    a no-op when the file is on disk, which leaves stage 0 alongside
+    the unmerged stages and causes git to ignore the additions.
+    """
+    run_git(["update-index", "--force-remove", path], check=False)
     lines = []
     if base_content is not None:
         sha = _git_hash_object(base_content)
