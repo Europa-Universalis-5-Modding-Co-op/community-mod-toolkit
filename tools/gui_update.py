@@ -1081,13 +1081,15 @@ def cmd_merge(args):
     _ensure_no_merge()
     _ensure_vanilla_merged_ref()
 
-    # If HEAD is a merge commit from a previous run (user resolved
-    # conflicts in a merge editor and committed), flatten it now into a
-    # single-parent commit and advance the bookmark. The flatten
-    # preserves the resolved tree exactly, only the parent linkage
-    # changes.
+    # If gui/vanilla is already in HEAD's ancestry (the user has
+    # committed a merge that absorbed it, possibly with later commits on
+    # top), advance the bookmark and skip re-merging. If HEAD itself is
+    # the merge commit, also flatten it for cleaner history.
     vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
     merged_sha = run_git(["rev-parse", MERGED_BRANCH])
+    head_already_merged = vanilla_sha != merged_sha and (
+        run_git(["merge-base", "--is-ancestor", vanilla_sha, "HEAD"],
+                check=False) is not None)
     if vanilla_sha != merged_sha and _head_is_vanilla_merge(vanilla_sha):
         bad = _scan_unresolved_conflicts()
         if bad:
@@ -1108,6 +1110,16 @@ def cmd_merge(args):
             ["branch", "--show-current"], check=False)
         if current_branch:
             _push_refs([current_branch], force=True)
+        merged_sha = vanilla_sha
+    elif head_already_merged:
+        # HEAD has gui/vanilla in its ancestry but isn't itself the merge
+        # commit (extra commits like apply output landed on top). The
+        # resolution is already in HEAD's tree, so just advance the bookmark.
+        print("Advancing gui/vanilla-merged bookmark "
+              "(gui/vanilla already in HEAD's ancestry)...")
+        run_git(["update-ref",
+                 f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
+        _push_refs([MERGED_BRANCH])
         merged_sha = vanilla_sha
 
     # Sync tracking from current mod state so OURS in the merge reflects
@@ -1292,7 +1304,8 @@ def cmd_merge(args):
         # Set MERGE_HEAD/MERGE_MSG so ``git status`` shows a merge in
         # progress; ``git commit`` will produce a merge commit, which
         # this script flattens into single-parent on the next run.
-        msg = f"Update {updated} vanilla GUI definition(s)"
+        affected = len(conflicts) + len(clean_paths)
+        msg = f"Merge vanilla GUI updates ({affected} definition(s))"
         _setup_merge_state(new_vanilla_sha, msg)
 
         print(f"\nConflicts in {len(conflicts)} file(s):")
@@ -1312,7 +1325,7 @@ def cmd_merge(args):
     )
     if diff_check.returncode != 0:
         run_git(["commit", "-m",
-                 f"Update {len(clean_paths)} vanilla GUI definition(s)"])
+                 f"Merge vanilla GUI updates ({len(clean_paths)} definition(s))"])
 
     # Advance the bookmark to match gui/vanilla.
     run_git(["update-ref",
