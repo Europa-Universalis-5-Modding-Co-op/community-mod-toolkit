@@ -13,9 +13,9 @@ Merging is per-file via ``git merge-file`` with the explicit base from
 ``gui/vanilla-merged``. When a file conflicts the script also populates
 the git index with stages 1/2/3 and writes ``.git/MERGE_HEAD`` so any
 git GUI sees a real merge in progress and offers a 3-way merge editor.
-Once the user resolves and commits, the resulting merge commit is
-flattened into a single-parent commit on the next run so git history
-tools render normal linear commits.
+Once the user resolves and commits the resulting merge commit, the
+next merge run advances ``gui/vanilla-merged`` to match ``gui/vanilla``
+so the merge is recognized as absorbed.
 
 Commands:
     init      Set up tracking for this mod
@@ -792,32 +792,6 @@ def _scan_unresolved_conflicts():
     return bad
 
 
-def _head_is_vanilla_merge(vanilla_sha):
-    """Return True if HEAD is a merge commit with ``vanilla_sha`` as a parent."""
-    parents_line = run_git(
-        ["rev-list", "--parents", "-n", "1", "HEAD"], check=False)
-    if not parents_line:
-        return False
-    parts = parents_line.split()
-    # parts = [HEAD, parent1, parent2, ...]; merge commits have len >= 3
-    if len(parts) < 3:
-        return False
-    return vanilla_sha in parts[1:]
-
-
-def _flatten_head_merge_commit():
-    """Rewrite HEAD merge commit as a regular single-parent commit.
-
-    Soft-resets to first parent (preserving index + working tree), then
-    re-commits with the same message and tree. Net result: identical
-    content, but history shows a normal linear commit instead of a
-    2-parent merge so diff tools render it as a normal commit.
-    """
-    msg = run_git(["log", "-1", "--pretty=%B", "HEAD"]) or "Update vanilla GUI definitions"
-    run_git(["reset", "--soft", "HEAD^1"])
-    run_git(["commit", "-m", msg])
-
-
 def _setup_merge_state(merge_head_sha, merge_msg):
     """Write ``.git/MERGE_HEAD``, ``.git/MERGE_MSG``, and ``ORIG_HEAD``
     so git and any git GUI recognize a merge in progress and offer a
@@ -1093,17 +1067,17 @@ def cmd_merge(args):
     _ensure_no_merge()
     _ensure_vanilla_merged_ref()
 
-    # If gui/vanilla is already in HEAD's ancestry (the user has
-    # committed a merge that absorbed it, possibly with later commits on
-    # top), advance the bookmark and skip re-merging. If HEAD itself is
-    # the merge commit, also flatten it for cleaner history.
+    # If gui/vanilla is already in HEAD's ancestry (the user committed
+    # the merge, possibly with later commits like apply output on top),
+    # advance the bookmark to the vanilla tip so the next three-way
+    # merge has the right base, and skip re-merging.
     vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
     merged_sha = run_git(["rev-parse", MERGED_BRANCH])
     head_already_merged = vanilla_sha != merged_sha and (
         run_git(["merge-base", "--is-ancestor", vanilla_sha, "HEAD"],
                 check=False) is not None)
-    just_flattened = False
-    if vanilla_sha != merged_sha and _head_is_vanilla_merge(vanilla_sha):
+    just_advanced = False
+    if head_already_merged:
         bad = _scan_unresolved_conflicts()
         if bad:
             print("Error: tracking files contain conflict markers:")
@@ -1112,37 +1086,22 @@ def cmd_merge(args):
             print("\nFix the markers, re-stage, and amend the commit, "
                   "then re-run merge.")
             return 1
-        print("Flattening previous merge commit into single-parent...")
-        _flatten_head_merge_commit()
-        run_git(["update-ref",
-                 f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
-        _push_refs([MERGED_BRANCH])
-        # Force-push the working branch since flatten rewrote its history;
-        # without this, GitHub Desktop sync produces phantom merge conflicts.
-        current_branch = run_git(
-            ["branch", "--show-current"], check=False)
-        if current_branch:
-            _push_refs([current_branch], force=True)
-        merged_sha = vanilla_sha
-        just_flattened = True
-    elif head_already_merged:
-        # HEAD has gui/vanilla in its ancestry but isn't itself the merge
-        # commit (extra commits like apply output landed on top). The
-        # resolution is already in HEAD's tree, so just advance the bookmark.
         print("Advancing gui/vanilla-merged bookmark "
               "(gui/vanilla already in HEAD's ancestry)...")
         run_git(["update-ref",
                  f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
         _push_refs([MERGED_BRANCH])
         merged_sha = vanilla_sha
+        just_advanced = True
 
     # Sync tracking from current mod state so OURS in the merge reflects
-    # edits/deletions made since the last refresh. Skip after a flatten:
-    # the resolution is in tracking and mod files are still stale, so
-    # re-deriving from mod would revert the resolution.
-    if just_flattened:
+    # edits/deletions made since the last refresh. Skip after advancing
+    # past an absorbed merge: the resolution is in tracking and mod
+    # files may still be pre-apply, so re-deriving from mod would
+    # revert the resolution.
+    if just_advanced:
         print("Skipping mod-state sync (tracking is authoritative "
-              "after flatten).")
+              "after merge absorption).")
     else:
         print("Syncing tracking files from current mod content...")
         mod_defs = _scan_definitions(ROOT_DIR, GUI_SOURCES)
@@ -1256,9 +1215,9 @@ def cmd_merge(args):
 
     # Per-file three-way merge with explicit base ``gui/vanilla-merged``
     # and theirs ``gui/vanilla``. Doing this manually (rather than via
-    # ``git merge``) allows flattening the final commit to a single
-    # parent without breaking base detection on the next run, since the
-    # next base comes from the bookmark ref and not from git ancestry.
+    # ``git merge``) keeps base detection on the bookmark ref instead
+    # of git ancestry, so the merge result doesn't depend on history
+    # manipulation between runs.
     print("Running three-way merge...")
     conflicts = []
     clean_paths = []
@@ -1322,8 +1281,8 @@ def cmd_merge(args):
         for tp, base, ours, theirs in conflicts:
             _stage_merge_entries(tp, base, ours, theirs)
         # Set MERGE_HEAD/MERGE_MSG so ``git status`` shows a merge in
-        # progress; ``git commit`` will produce a merge commit, which
-        # this script flattens into single-parent on the next run.
+        # progress; ``git commit`` produces a 2-parent merge commit,
+        # and the next merge run advances the bookmark to recognize it.
         affected = len(conflicts) + len(clean_paths)
         msg = f"Merge vanilla GUI updates ({affected} definition(s))"
         _setup_merge_state(new_vanilla_sha, msg)
@@ -1334,7 +1293,7 @@ def cmd_merge(args):
         print("\nResolve the conflicts in your merge tool of choice, then:")
         print(f"  git add {TRACKING_DIR_NAME}/")
         print("  git commit")
-        print("  python tools/gui_update.py merge   # flattens + finalizes")
+        print("  python tools/gui_update.py merge   # advances bookmark")
         return 1
 
     # No conflicts: stage and commit as a regular single-parent commit.
