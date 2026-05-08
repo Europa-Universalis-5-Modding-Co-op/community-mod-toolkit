@@ -985,6 +985,7 @@ def cmd_check(args):
     if not _vanilla_branch_exists():
         print(f"Error: {VANILLA_BRANCH} branch not found.")
         return 1
+    _ensure_vanilla_merged_ref()
 
     print("Scanning current vanilla GUI files...")
     vanilla_defs = _scan_definitions(game_dir, GUI_SOURCES)
@@ -999,8 +1000,14 @@ def cmd_check(args):
     changed = []
     removed = []
 
+    # Compare against the last merged baseline, not gui/vanilla itself.
+    # An aborted merge will have advanced gui/vanilla but left
+    # gui/vanilla-merged behind; comparing to gui/vanilla would hide the
+    # pending changes the next merge still needs to incorporate.
+    base_ref = MERGED_BRANCH if _vanilla_merged_ref_exists() else VANILLA_BRANCH
+
     for key, entry in sorted(manifest["definitions"].items()):
-        old = _read_from_branch(VANILLA_BRANCH, entry["tracking_path"])
+        old = _read_from_branch(base_ref, entry["tracking_path"])
         if old is None:
             continue
         if key.startswith("constant:"):
@@ -1014,8 +1021,19 @@ def cmd_check(args):
         else:
             removed.append((key, entry))
 
+    pending_merge = (
+        _vanilla_merged_ref_exists()
+        and run_git(["rev-parse", VANILLA_BRANCH])
+            != run_git(["rev-parse", MERGED_BRANCH])
+    )
+
     if not changed and not removed:
-        print("\nAll tracked definitions are up to date with vanilla.")
+        if pending_merge:
+            print("\nPrevious merge is unfinished "
+                  f"({VANILLA_BRANCH} is ahead of {MERGED_BRANCH}).")
+            print("Run 'gui_update.py merge' to resume.")
+        else:
+            print("\nAll tracked definitions are up to date with vanilla.")
         return 0
 
     if changed:
@@ -1027,6 +1045,9 @@ def cmd_check(args):
         for key, entry in removed:
             print(f"  {key}  (was in {entry['vanilla_file']})")
 
+    if pending_merge:
+        print(f"\nNote: {VANILLA_BRANCH} is ahead of {MERGED_BRANCH} from a "
+              "previous unfinished merge; running merge will resume it.")
     print("\nRun 'gui_update.py merge' to incorporate these changes.")
     return 0
 
