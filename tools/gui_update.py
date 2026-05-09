@@ -9,19 +9,9 @@ Uses two git refs to track vanilla state:
   per-file three-way merges so the merge result does not depend on git's
   parent-link auto-detection.
 
-Requires ``tools/dependencies/gui-tracking/** -text`` in .gitattributes so
-blobs from script writes and from merge-tool resolution share one
-encoding. Without it, the repo's eol=crlf rule normalizes script-written
-files to LF in the blob while editor-resolved files stay CRLF, and any
-cross-boundary diff renders as a whole-file replacement in git GUIs.
-
-Merging is per-file via ``git merge-file`` with the explicit base from
-``gui/vanilla-merged``. When a file conflicts the script also populates
-the git index with stages 1/2/3 and writes ``.git/MERGE_HEAD`` so any
-git GUI sees a real merge in progress and offers a 3-way merge editor.
-Once the user resolves and commits the resulting merge commit, the
-next ``apply`` (or ``merge``) run advances ``gui/vanilla-merged`` to
-match ``gui/vanilla`` so the merge is recognized as absorbed.
+Per-file three-way merges run through ``git merge-file`` with
+``gui/vanilla-merged`` as base. Conflicts produce a 2-parent merge
+commit; the next ``apply`` (or ``merge``) run advances the bookmark.
 
 Commands:
     init      Set up tracking for this mod
@@ -82,8 +72,7 @@ STEAM_GAME_PATHS = [
 _TYPES_BLOCK_RE = re.compile(r"types\s+(\w+)\s*(\{)?\s*(?:#.*)?$")
 _TYPE_DEF_RE = re.compile(r"type\s+(\w+)\s*=\s*(\w+)\s*(\{)?\s*(?:#.*)?$")
 _TEMPLATE_RE = re.compile(r"template\s+(\w+)\s*(\{)?\s*(?:#.*)?$")
-# Top-level widget instances: "window = {", "lateralview = {", etc.
-# Only matched on lines with NO leading whitespace (top-level).
+# Match top-level widget instances at column 0 only.
 _WIDGET_INSTANCE_RE = re.compile(r"(\w+)\s*=\s*(\{)?\s*(?:#.*)?$")
 _NAME_PROP_RE = re.compile(r'name\s*=\s*"([^"]+)"')
 _CONSTANT_RE = re.compile(r"@(\w+)\s*=")
@@ -263,9 +252,7 @@ def parse_gui_file(text, source_file):
             i = types_end + 1
             continue
 
-        # ── Top-level widget instance ─────────────────────────────
-        # Only match at column 0 (no leading whitespace) to avoid
-        # picking up nested widget children inside other definitions.
+        # ── Top-level widget instance (column 0 only — skip nested children)
         raw = lines[i]
         if raw and raw[0:1] not in ("", " ", "\t", "\r", "\n", "#", "@"):
             m = _WIDGET_INSTANCE_RE.match(stripped)
@@ -375,12 +362,7 @@ def _vanilla_merged_ref_exists():
 
 
 def _ensure_vanilla_merged_ref():
-    """Initialize gui/vanilla-merged from gui/vanilla tip if missing.
-
-    When the bookmark is absent, the working tree is already
-    reconciled against gui/vanilla's current tip, so that tip is
-    the correct base for the next three-way merge.
-    """
+    """Initialize gui/vanilla-merged from gui/vanilla tip if missing."""
     if _vanilla_merged_ref_exists():
         return
     if not _vanilla_branch_exists():
@@ -413,11 +395,7 @@ def _ensure_no_merge():
 
 
 def _read_from_branch(branch, path):
-    """Read a file from *branch* without switching.  Returns content or ``None``.
-
-    Strips a leading UTF-8 BOM if present so callers compare textual
-    content without the BOM byte affecting hashes or merge inputs.
-    """
+    """Read a file from *branch* without switching, stripping any leading BOM."""
     content = run_git(["show", f"{branch}:{path}"], check=False)
     if content is not None and content.startswith("﻿"):
         content = content[1:]
@@ -425,13 +403,7 @@ def _read_from_branch(branch, path):
 
 
 def _push_refs(refs, force=False):
-    """Push the given refs to origin if configured.  No-op for local-only repos.
-
-    Failures (offline, auth, non-fast-forward) warn but don't abort.
-    With ``force=True`` uses ``--force-with-lease`` so a fresh orphan from
-    'init --force' replaces the stale remote tip without needing manual
-    deletion. Lease still refuses if the remote moved unexpectedly.
-    """
+    """Push refs to origin (no-op for local-only repos). force=True uses --force-with-lease."""
     refs = [r for r in refs if r]
     if not refs:
         return
@@ -597,14 +569,7 @@ def _find_overrides(mod_defs, vanilla_defs):
 
 
 def _link_constants(mod_defs, vanilla_defs, override_pairs):
-    """Return ``[(mod_const, vanilla_const), …]`` linked by file-scope usage.
-
-    A mod constant is tracked only when an override in the same mod file
-    references it. The vanilla side is the same-named constant in each
-    vanilla file containing such an overridden definition - so a single
-    mod constant can produce N pairs when its file overrides definitions
-    from N distinct vanilla files.
-    """
+    """Return ``[(mod_const, vanilla_const), …]`` linked by file-scope usage. A mod constant pairs with each vanilla file that holds one of its referenced overrides."""
     mod_consts = {}
     for d in mod_defs:
         if d.kind == "constant":
@@ -694,15 +659,7 @@ def _body_hash(content):
 
 
 def _write_tracking_file(rel_path, content):
-    """Write a tracking file under ROOT_DIR with UTF-8 BOM + CRLF.
-
-    BOM matches what editors produce when users save resolved
-    merges, so all tracking blobs share one encoding. Without it,
-    BOM-less script blobs and BOM-prefixed editor blobs differ on
-    every byte for textually-identical content, making any diff
-    that crosses the boundary render as a whole-file replacement
-    in git GUIs. Skips the write when on-disk bytes already match.
-    """
+    """Write a tracking file under ROOT_DIR with UTF-8 BOM + CRLF."""
     abs_path = os.path.join(ROOT_DIR, rel_path.replace("/", os.sep))
     os.makedirs(os.path.dirname(abs_path), exist_ok=True)
     if content.startswith("﻿"):
@@ -799,16 +756,7 @@ def _scan_unresolved_conflicts():
 
 
 def _advance_merged_ref_if_absorbed():
-    """Advance ``gui/vanilla-merged`` to ``gui/vanilla`` when HEAD has
-    already absorbed the merge.
-
-    Detects the post-resolve state (the user committed the merge but
-    the bookmark hasn't moved yet) and fixes it. Called from both
-    ``cmd_merge`` and ``cmd_apply`` so users don't need to invoke
-    merge a second time after resolving conflicts. Exits with status
-    1 if tracking files still contain conflict markers. Returns
-    True when the bookmark was advanced, False otherwise.
-    """
+    """Advance ``gui/vanilla-merged`` to ``gui/vanilla`` if HEAD already has the merge. Returns whether it advanced; exits 1 on stray conflict markers."""
     if not _vanilla_branch_exists() or not _vanilla_merged_ref_exists():
         return False
     vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
@@ -826,8 +774,7 @@ def _advance_merged_ref_if_absorbed():
         print("\nFix the markers, re-stage, and amend the commit, "
               "then re-run.")
         sys.exit(1)
-    print("Advancing gui/vanilla-merged bookmark "
-          "(gui/vanilla already in HEAD's ancestry)...")
+    print("Advancing gui/vanilla-merged bookmark...")
     run_git(["update-ref",
              f"refs/heads/{MERGED_BRANCH}", vanilla_sha])
     _push_refs([MERGED_BRANCH])
@@ -835,11 +782,7 @@ def _advance_merged_ref_if_absorbed():
 
 
 def _setup_merge_state(merge_head_sha, merge_msg):
-    """Write ``.git/MERGE_HEAD``, ``.git/MERGE_MSG``, and ``ORIG_HEAD``
-    so git and any git GUI recognize a merge in progress and offer a
-    3-way merge editor. ``ORIG_HEAD`` lets ``git merge --abort`` work
-    to back out of the attempt cleanly.
-    """
+    """Write ``.git/MERGE_HEAD``/``MERGE_MSG``/``ORIG_HEAD`` so git sees a merge in progress."""
     git_dir = os.path.join(ROOT_DIR, ".git")
     head_sha = run_git(["rev-parse", "HEAD"])
     for name, content in (
@@ -853,19 +796,9 @@ def _setup_merge_state(merge_head_sha, merge_msg):
 
 
 def _stage_merge_entries(path, base_content, ours_content, theirs_content):
-    """Populate index stages 1/2/3 for ``path`` so git treats the file
-    as conflicted (which is what merge editors key off).
-
-    ``--force-remove`` clears the existing stage 0 entry regardless of
-    whether the file exists in the working tree; plain ``--remove`` is
-    a no-op when the file is on disk, which leaves stage 0 alongside
-    the unmerged stages and causes git to ignore the additions.
-
-    Input is sent as bytes (not ``text=True``) because Python's text
-    mode translates ``\\n`` to ``\\r\\n`` on Windows, and git's
-    ``--index-info`` parser then treats the trailing ``\\r`` as part of
-    the path and silently ignores the entry.
-    """
+    """Populate index stages 1/2/3 for ``path`` so git treats the file as conflicted."""
+    # --force-remove clears stage 0; plain --remove is a no-op when the file
+    # exists on disk, which would leave stage 0 alongside the unmerged stages.
     run_git(["update-index", "--force-remove", path], check=False)
     lines = []
     if base_content is not None:
@@ -879,6 +812,7 @@ def _stage_merge_entries(path, base_content, ours_content, theirs_content):
         lines.append(f"100644 {sha} 3\t{path}")
     if not lines:
         return
+    # Send bytes; text=True would CRLF the input on Windows and break --index-info parsing.
     subprocess.run(
         ["git", "update-index", "--index-info"],
         cwd=ROOT_DIR,
@@ -916,8 +850,7 @@ def cmd_init(args):
                 run_git(["rm", "-rf", TRACKING_DIR_NAME])
                 run_git(["commit", "-m",
                          "Reset GUI tracking before re-initialization"])
-            # Untracked leftovers + empty dirs (git clean is Windows-friendlier
-            # than shutil for OneDrive-synced trees).
+            # git clean handles Windows/OneDrive better than shutil for leftovers + empty dirs.
             run_git(["clean", "-fdx", "--", TRACKING_DIR_NAME],
                     check=False)
             if os.path.isdir(TRACKING_DIR):
@@ -993,8 +926,7 @@ def cmd_init(args):
         "Initialize vanilla GUI definitions",
         force_push=args.force)
 
-    # 2. Set gui/vanilla-merged to point at the same commit so the next
-    #    merge has a valid base for three-way merging.
+    # 2. Anchor gui/vanilla-merged at the same commit for the next merge base.
     run_git(["update-ref", f"refs/heads/{MERGED_BRANCH}", new_vanilla_sha])
     _push_refs([MERGED_BRANCH], force=args.force)
 
@@ -1043,10 +975,7 @@ def cmd_check(args):
     changed = []
     removed = []
 
-    # Compare against the last merged baseline, not gui/vanilla itself.
-    # An aborted merge will have advanced gui/vanilla but left
-    # gui/vanilla-merged behind; comparing to gui/vanilla would hide the
-    # pending changes the next merge still needs to incorporate.
+    # Compare against the merged baseline so an aborted merge still surfaces pending changes.
     base_ref = MERGED_BRANCH if _vanilla_merged_ref_exists() else VANILLA_BRANCH
 
     for key, entry in sorted(manifest["definitions"].items()):
@@ -1113,14 +1042,10 @@ def cmd_merge(args):
     vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
     merged_sha = run_git(["rev-parse", MERGED_BRANCH])
 
-    # Sync tracking from current mod state so OURS in the merge reflects
-    # edits/deletions made since the last refresh. Skip after advancing
-    # past an absorbed merge: the resolution is in tracking and mod
-    # files may still be pre-apply, so re-deriving from mod would
-    # revert the resolution.
+    # Sync tracking from mod state. Skip if just advanced — tracking holds
+    # the resolution and mod files may still be pre-apply.
     if just_advanced:
-        print("Skipping mod-state sync (tracking is authoritative "
-              "after merge absorption).")
+        print("Skipping mod-state sync.")
     else:
         print("Syncing tracking files from current mod content...")
         mod_defs = _scan_definitions(ROOT_DIR, GUI_SOURCES)
@@ -1213,9 +1138,7 @@ def cmd_merge(args):
                     or _body_hash(old_content) != _body_hash(new_content)):
                 updated += 1
 
-    # gui/vanilla-merged trailing gui/vanilla without a HEAD merge commit
-    # means the previous merge was aborted; re-run the merge from current
-    # gui/vanilla rather than treating it as a no-op.
+    # Bookmark behind vanilla without a HEAD merge means the previous run was aborted; re-run.
     behind_vanilla = vanilla_sha != merged_sha
 
     if updated == 0 and not behind_vanilla:
@@ -1232,11 +1155,8 @@ def cmd_merge(args):
               "run; resuming merge.")
         new_vanilla_sha = vanilla_sha
 
-    # Per-file three-way merge with explicit base ``gui/vanilla-merged``
-    # and theirs ``gui/vanilla``. Doing this manually (rather than via
-    # ``git merge``) keeps base detection on the bookmark ref instead
-    # of git ancestry, so the merge result doesn't depend on history
-    # manipulation between runs.
+    # Per-file three-way merge using gui/vanilla-merged as base and
+    # gui/vanilla as theirs.
     print("Running three-way merge...")
     conflicts = []
     clean_paths = []
@@ -1295,13 +1215,10 @@ def cmd_merge(args):
         # Stage the clean files normally.
         for tp in clean_paths:
             run_git(["add", tp])
-        # Stage conflicting files at stages 1/2/3 so git GUIs see a real
-        # merge conflict and offer their 3-way merge editor.
+        # Stage conflicts at 1/2/3 so git GUIs offer the 3-way merge editor.
         for tp, base, ours, theirs in conflicts:
             _stage_merge_entries(tp, base, ours, theirs)
-        # Set MERGE_HEAD/MERGE_MSG so ``git status`` shows a merge in
-        # progress; ``git commit`` produces a 2-parent merge commit,
-        # and the next merge run advances the bookmark to recognize it.
+        # Set MERGE_HEAD/MERGE_MSG so the next git commit produces a 2-parent merge.
         affected = len(conflicts) + len(clean_paths)
         msg = f"Merge vanilla GUI updates ({affected} definition(s))"
         _setup_merge_state(new_vanilla_sha, msg)
@@ -1350,9 +1267,7 @@ def cmd_apply(args):
     applied = 0
     errors = 0
 
-    # Read all tracking files first so constant value divergence (multiple
-    # entries pointing at the same @name in the same mod file but resolving
-    # to different values) can be reported before any file is touched.
+    # Read all tracking files first so divergent constants get reported before any mod file is touched.
     const_groups = {}
     to_apply = []
 
