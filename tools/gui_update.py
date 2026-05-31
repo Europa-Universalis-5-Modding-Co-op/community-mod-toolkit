@@ -433,12 +433,16 @@ def _push_refs(refs, force=False):
 
 def _update_vanilla_branch(tracking_files,
                            message="Update vanilla GUI definitions",
+                           version=None,
                            force_push=False):
     """Create or update the ``gui/vanilla`` branch via plumbing (no checkout).
 
     *tracking_files* maps relative paths to content strings.
+    *version* prefixes the commit subject when provided.
     Returns the new commit SHA.
     """
+    if version:
+        message = f"{version}: {message}"
     tmp_index = os.path.join(ROOT_DIR, ".git", "tmp_gui_index")
     plumbing = {"GIT_INDEX_FILE": tmp_index}
 
@@ -820,6 +824,127 @@ def _stage_merge_entries(path, base_content, ours_content, theirs_content):
         check=True,
     )
 
+# ─── Game Version ──────────────────────────────────────────────────────────────
+
+# continue_game.json sits in the EU5 user-data dir, two levels above the mod root.
+CONTINUE_GAME_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(ROOT_DIR)), "continue_game.json")
+
+_VERSION_RE = re.compile(r"v?(\d+(?:\.\d+)*)", re.IGNORECASE)
+
+
+def _version_key(version):
+    """Parse *version* into a tuple of ints for comparison, or None."""
+    if not version:
+        return None
+    m = _VERSION_RE.fullmatch(str(version).strip())
+    if not m:
+        return None
+    return tuple(int(p) for p in m.group(1).split("."))
+
+
+def _normalize_version(version):
+    """Return *version* as ``vMAJOR.MINOR.PATCH`` with a single leading ``v``."""
+    s = str(version).strip()
+    if s[:1] in ("v", "V"):
+        s = s[1:]
+    return "v" + s
+
+
+def _leading_version(text):
+    """Return the normalized version token at the start of *text*, or None."""
+    m = re.match(r"\s*(v?\d+(?:\.\d+)*)", text, re.IGNORECASE)
+    return _normalize_version(m.group(1)) if m else None
+
+
+def _ask(prompt):
+    """input() that exits cleanly when no interactive terminal is attached."""
+    try:
+        return input(prompt)
+    except EOFError:
+        print("\nError: A game version is required but no terminal is "
+              "available to prompt for one.")
+        print("Pass it explicitly, e.g. --gv 1.2.5.")
+        sys.exit(1)
+
+
+def _read_continue_game_version():
+    """Return ``rawGameVersion`` from continue_game.json, normalized, or None."""
+    try:
+        with open(CONTINUE_GAME_PATH, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    raw = data.get("rawGameVersion")
+    return _normalize_version(raw) if _version_key(raw) else None
+
+
+def _last_vanilla_commit_version():
+    """Return the version from the latest gui/vanilla commit subject, or None."""
+    if not _vanilla_branch_exists():
+        return None
+    subject = run_git(["log", "-1", "--format=%s", VANILLA_BRANCH], check=False)
+    return _leading_version(subject) if subject else None
+
+
+def _prompt_version_value(default):
+    """Prompt until a valid version is entered; empty input takes *default*."""
+    while True:
+        if default:
+            resp = _ask(f"Enter game version [{default}]: ").strip()
+            if not resp:
+                return default
+        else:
+            resp = _ask("Enter game version (e.g. 1.2.5): ").strip()
+            if not resp:
+                continue
+        if _version_key(resp) is None:
+            print("  Not a valid version. Use a numeric form like 1.2.5.")
+            continue
+        return _normalize_version(resp)
+
+
+def _resolve_game_version(args, is_init):
+    """Resolve the version to prefix onto the gui/vanilla commit subject.
+
+    A ``--game-version`` flag wins. Otherwise ``init`` confirms the
+    continue_game.json reading interactively; ``merge`` and ``refresh`` reuse
+    it only when it is newer than the last tracked commit, and prompt when it
+    is not.
+    """
+    flag = getattr(args, "game_version", None)
+    if flag:
+        if _version_key(flag) is None:
+            print(f"Error: Invalid --game-version value: {flag}")
+            sys.exit(1)
+        return _normalize_version(flag)
+
+    detected = _read_continue_game_version()
+
+    if is_init:
+        if detected:
+            print(f"\nGame version read from continue_game.json: {detected}")
+            resp = _ask("Press [Enter]/[y] to confirm, or type the correct "
+                        "version: ").strip()
+            if not resp or resp.lower() in ("y", "yes"):
+                return detected
+            if _version_key(resp) is None:
+                return _prompt_version_value(detected)
+            return _normalize_version(resp)
+        print("\nGame version not found in continue_game.json.")
+        return _prompt_version_value(None)
+
+    last = _last_vanilla_commit_version()
+    if detected and last and _version_key(detected) > _version_key(last):
+        print(f"Using game version {detected} "
+              f"(newer than last tracked {last}).")
+        return detected
+
+    print("\nNo newer game version detected automatically:")
+    print(f"  continue_game.json: {detected or '(unavailable)'}")
+    print(f"  last tracked:       {last or '(none)'}")
+    return _prompt_version_value(last or detected)
+
 # ─── Commands ────────────────────────────────────────────────────────────────
 
 def cmd_init(args):
@@ -920,10 +1045,12 @@ def cmd_init(args):
         vanilla_files[tp] = header + vd.text + "\n"
 
     # 1. Create gui/vanilla orphan branch (via plumbing, no checkout)
+    version = _resolve_game_version(args, is_init=True)
     print(f"\nCreating {VANILLA_BRANCH} branch...")
     new_vanilla_sha = _update_vanilla_branch(
         vanilla_files,
         "Initialize vanilla GUI definitions",
+        version=version,
         force_push=args.force)
 
     # 2. Anchor gui/vanilla-merged at the same commit for the next merge base.
@@ -1146,10 +1273,12 @@ def cmd_merge(args):
         return 0
 
     if updated > 0:
+        version = _resolve_game_version(args, is_init=False)
         print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) changed)...")
         new_vanilla_sha = _update_vanilla_branch(
             tracking_files,
-            f"Update {updated} vanilla GUI definition(s)")
+            f"Update {updated} vanilla GUI definition(s)",
+            version=version)
     else:
         print(f"{VANILLA_BRANCH} has unmerged commits from a previous "
               "run; resuming merge.")
@@ -1456,8 +1585,9 @@ def cmd_refresh(args):
                 entry["vanilla_file"], entry["mod_file"])
             vanilla_files[entry["tracking_path"]] = (
                 header + vd.text + "\n")
+    version = _resolve_game_version(args, is_init=False)
     new_vanilla_sha = _update_vanilla_branch(
-        vanilla_files, "Refresh vanilla GUI definitions")
+        vanilla_files, "Refresh vanilla GUI definitions", version=version)
 
     # Refresh re-baselines tracking, so the bookmark moves to the new tip.
     run_git(["update-ref",
@@ -1549,6 +1679,14 @@ def main():
     sub = parser.add_subparsers(dest="command")
     sub.required = True
 
+    def add_version_arg(p):
+        p.add_argument(
+            "--game-version", "--gv", "-gv", dest="game_version",
+            metavar="VERSION", default=None,
+            help="Game version for the gui/vanilla commit subject "
+                 "(e.g. 1.2.5). Overrides auto-detection and prompting.",
+        )
+
     init_parser = sub.add_parser(
         "init", help="Initialize GUI tracking for this mod")
     init_parser.add_argument(
@@ -1557,14 +1695,18 @@ def main():
              f"{TRACKING_DIR_NAME}/, {VANILLA_BRANCH}, and "
              f"{MERGED_BRANCH}) before re-initializing.",
     )
+    add_version_arg(init_parser)
     sub.add_parser("check",
                    help="Check for vanilla GUI changes")
-    sub.add_parser("merge",
-                   help="Update vanilla branch and merge changes")
+    merge_parser = sub.add_parser(
+        "merge", help="Update vanilla branch and merge changes")
+    add_version_arg(merge_parser)
     sub.add_parser("apply",
                    help="Apply resolved changes back to mod GUI files")
-    sub.add_parser("refresh",
-                   help="Re-extract mod definitions into tracking files")
+    refresh_parser = sub.add_parser(
+        "refresh",
+        help="Re-extract mod definitions into tracking files")
+    add_version_arg(refresh_parser)
     sub.add_parser("status",
                    help="Show tracking status")
 
