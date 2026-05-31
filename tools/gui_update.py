@@ -431,6 +431,11 @@ def _push_refs(refs, force=False):
                 print(f"  {line}")
 
 
+def _versioned_message(message, version):
+    """Prefix the commit subject *message* with *version* when it is set."""
+    return f"{version}: {message}" if version else message
+
+
 def _update_vanilla_branch(tracking_files,
                            message="Update vanilla GUI definitions",
                            version=None,
@@ -441,8 +446,7 @@ def _update_vanilla_branch(tracking_files,
     *version* prefixes the commit subject when provided.
     Returns the new commit SHA.
     """
-    if version:
-        message = f"{version}: {message}"
+    message = _versioned_message(message, version)
     tmp_index = os.path.join(ROOT_DIR, ".git", "tmp_gui_index")
     plumbing = {"GIT_INDEX_FILE": tmp_index}
 
@@ -904,13 +908,24 @@ def _prompt_version_value(default):
         return _normalize_version(resp)
 
 
+def _confirm_or_correct_version(detected):
+    """Confirm *detected* or type a correction; return the chosen version."""
+    resp = _ask("Press [Enter]/[y] to confirm, or type the correct "
+                "version: ").strip()
+    if not resp or resp.lower() in ("y", "yes"):
+        return detected
+    if _version_key(resp) is None:
+        return _prompt_version_value(detected)
+    return _normalize_version(resp)
+
+
 def _resolve_game_version(args, is_init):
     """Resolve the version to prefix onto the gui/vanilla commit subject.
 
-    A ``--game-version`` flag wins. Otherwise ``init`` confirms the
-    continue_game.json reading interactively; ``merge`` and ``refresh`` reuse
-    it only when it is newer than the last tracked commit, and prompt when it
-    is not.
+    A ``--game-version`` flag wins and skips prompting. Otherwise the detected
+    version is always shown for interactive confirmation (press [Enter]/[y] to
+    accept or type a correction), including when it is newer than the last
+    tracked commit, so an auto-detection can always be fixed.
     """
     flag = getattr(args, "game_version", None)
     if flag:
@@ -924,21 +939,15 @@ def _resolve_game_version(args, is_init):
     if is_init:
         if detected:
             print(f"\nGame version read from continue_game.json: {detected}")
-            resp = _ask("Press [Enter]/[y] to confirm, or type the correct "
-                        "version: ").strip()
-            if not resp or resp.lower() in ("y", "yes"):
-                return detected
-            if _version_key(resp) is None:
-                return _prompt_version_value(detected)
-            return _normalize_version(resp)
+            return _confirm_or_correct_version(detected)
         print("\nGame version not found in continue_game.json.")
         return _prompt_version_value(None)
 
     last = _last_vanilla_commit_version()
     if detected and last and _version_key(detected) > _version_key(last):
-        print(f"Using game version {detected} "
+        print(f"\nGame version read from continue_game.json: {detected} "
               f"(newer than last tracked {last}).")
-        return detected
+        return _confirm_or_correct_version(detected)
 
     print("\nNo newer game version detected automatically:")
     print(f"  continue_game.json: {detected or '(unavailable)'}")
@@ -1071,7 +1080,9 @@ def cmd_init(args):
     # 4. Commit
     run_git(["add", TRACKING_DIR_NAME + "/"])
     run_git(["commit", "-m",
-             f"Initialize GUI tracking with {total} definition(s)"])
+             _versioned_message(
+                 f"Initialize GUI tracking with {total} definition(s)",
+                 version)])
 
     print(f"\nDone! Tracking {total} GUI override(s).")
     print("Run 'gui_update.py check' after a game update to detect changes.")
@@ -1283,6 +1294,7 @@ def cmd_merge(args):
         print(f"{VANILLA_BRANCH} has unmerged commits from a previous "
               "run; resuming merge.")
         new_vanilla_sha = vanilla_sha
+        version = _last_vanilla_commit_version()
 
     # Per-file three-way merge using gui/vanilla-merged as base and
     # gui/vanilla as theirs.
@@ -1349,7 +1361,8 @@ def cmd_merge(args):
             _stage_merge_entries(tp, base, ours, theirs)
         # Set MERGE_HEAD/MERGE_MSG so the next git commit produces a 2-parent merge.
         affected = len(conflicts) + len(clean_paths)
-        msg = f"Merge vanilla GUI updates ({affected} definition(s))"
+        msg = _versioned_message(
+            f"Merge vanilla GUI updates ({affected} definition(s))", version)
         _setup_merge_state(new_vanilla_sha, msg)
 
         print(f"\nConflicts in {len(conflicts)} file(s):")
@@ -1367,7 +1380,10 @@ def cmd_merge(args):
     )
     if diff_check.returncode != 0:
         run_git(["commit", "-m",
-                 f"Merge vanilla GUI updates ({len(clean_paths)} definition(s))"])
+                 _versioned_message(
+                     f"Merge vanilla GUI updates "
+                     f"({len(clean_paths)} definition(s))",
+                     version)])
 
     # Advance the bookmark to match gui/vanilla.
     run_git(["update-ref",
