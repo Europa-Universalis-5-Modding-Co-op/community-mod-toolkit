@@ -252,6 +252,31 @@ def load_metadata_version(metadata_path, label):
 
     return version
 
+def _clean_tags(raw):
+    """Normalize a raw tags value into a de-duplicated list of non-empty strings."""
+    if not isinstance(raw, list):
+        return []
+    cleaned = []
+    for tag in raw:
+        tag = str(tag).strip()
+        if tag and tag not in cleaned:
+            cleaned.append(tag)
+    return cleaned
+
+def load_workshop_tags(metadata_path, label):
+    """Load Workshop tags from a metadata.json file."""
+    try:
+        with open(metadata_path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"Warning: Metadata file not found for {label}: {metadata_path}")
+        return []
+    except Exception as e:
+        print(f"Warning: Failed reading metadata for {label} at '{metadata_path}': {e}")
+        return []
+
+    return _clean_tags(data.get("tags"))
+
 def should_upload_for_version(version_cache, cache_key, current_version):
     """Return True when upload is needed for a version-gated entry."""
     entries = version_cache.setdefault("entries", {})
@@ -555,7 +580,8 @@ def _load_submod_metadata(mod_dir):
         "name": name,
         "version": version,
         "root": mod_dir,
-        "thumbnail": os.path.join(mod_dir, ".metadata", "thumbnail.png")
+        "thumbnail": os.path.join(mod_dir, ".metadata", "thumbnail.png"),
+        "tags": _clean_tags(data.get("tags"))
     }
 
 def ensure_submod_item_id(steam, mod_id, workshop_id, config_path):
@@ -641,7 +667,7 @@ def upload_submods(steam, config, version_gate_enabled=False, force_upload=False
         if not os.path.exists(preview_path):
             preview_path = None
 
-        if not upload_release(steam, meta["root"], preview_path, workshop_id, title):
+        if not upload_release(steam, meta["root"], preview_path, workshop_id, title, tags=meta["tags"]):
             success = False
             continue
 
@@ -824,7 +850,7 @@ def _submit_and_wait(steam, handle, change_note="", show_progress=False):
 
     return True
 
-def upload_release(steam, content_dir, preview_path, item_id, workshop_title=None, change_note=""):
+def upload_release(steam, content_dir, preview_path, item_id, workshop_title=None, change_note="", tags=None):
     if not os.path.isdir(content_dir):
         print(f"Error: Release directory not found: {content_dir}")
         return False
@@ -839,6 +865,13 @@ def upload_release(steam, content_dir, preview_path, item_id, workshop_title=Non
         title_result = workshop.SetItemTitle(handle, workshop_title)
         if title_result is False:
             print("Error: SetItemTitle failed.")
+            return False
+
+    if tags:
+        print(f"Setting Workshop tags: {', '.join(tags)}")
+        tags_result = workshop.SetItemTags(handle, tags)
+        if tags_result is False:
+            print("Error: SetItemTags failed.")
             return False
 
     content_result = workshop.SetItemContent(handle, content_dir)
@@ -1270,8 +1303,10 @@ def main():
     release_dir = None
     preview_path = None
     workshop_title = None
+    main_tags = []
     if upload_mod_effective:
         release_dir, preview_path, workshop_title = build_release(dev_mode=args.dev, dev_name=dev_name)
+        main_tags = load_workshop_tags(METADATA_PATH, "main mod")
 
     uploaded_main = False
 
@@ -1288,7 +1323,7 @@ def main():
 
         if upload_mod_effective:
             if not upload_release(steam, release_dir, preview_path, item_id,
-                                  workshop_title, change_note=change_note):
+                                  workshop_title, change_note=change_note, tags=main_tags):
                 return 1
             uploaded_main = True
 
