@@ -1077,12 +1077,15 @@ def trim_description(text, lang_label):
         return encoded[:MAX_DESCRIPTION_LENGTH].decode("utf-8", errors="ignore")
     return text
 
-def enforce_title_length(title, lang_label):
-    """Drop the title when it exceeds MAX_TITLE_LENGTH bytes and warn."""
+def enforce_title_length(title, lang_label, fallback=None):
+    """Replace an over-length title with the fallback, or drop it when there is none, and warn."""
     if not title:
         return title
 
     if len(title.encode("utf-8")) > MAX_TITLE_LENGTH:
+        if fallback:
+            print(f"Warning: Title for '{lang_label}' exceeds {MAX_TITLE_LENGTH} bytes. Using the source title instead.")
+            return fallback
         print(f"Warning: Title for '{lang_label}' exceeds {MAX_TITLE_LENGTH} bytes. Skipping title for this language.")
         return None
     return title
@@ -1132,7 +1135,7 @@ def build_workshop_page_updates(config, item_id, dev_mode=False, dev_name=None):
         if title_text is None and desc_text is None:
             continue
 
-        title_text = enforce_title_length(title_text, lang)
+        title_text = enforce_title_length(title_text, lang, fallback=base_title)
         desc_text = trim_description(desc_text, lang)
         translations[lang] = {"title": title_text, "description": desc_text}
 
