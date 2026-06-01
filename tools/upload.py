@@ -49,6 +49,7 @@ WORKSHOP_DESCRIPTION_MARKER = "===WORKSHOP_DESCRIPTION==="
 WORKSHOP_NO_TRANSLATE_BELOW = "--NO-TRANSLATE-BELOW--"
 WORKSHOP_ITEM_ID_TOKEN = "$item-id$"
 MAX_DESCRIPTION_LENGTH = 8000
+MAX_TITLE_LENGTH = 128
 UPLOAD_MOD_DEFAULT_KEY = "upload_mod_by_default"
 UPLOAD_WORKSHOP_PAGES_DEFAULT_KEY = "upload_workshop_pages_by_default"
 UPLOAD_SUBMODS_DEFAULT_KEY = "upload_submods_by_default"
@@ -1076,6 +1077,16 @@ def trim_description(text, lang_label):
         return encoded[:MAX_DESCRIPTION_LENGTH].decode("utf-8", errors="ignore")
     return text
 
+def enforce_title_length(title, lang_label):
+    """Drop the title when it exceeds MAX_TITLE_LENGTH characters and warn."""
+    if not title:
+        return title
+
+    if len(title) > MAX_TITLE_LENGTH:
+        print(f"Warning: Title for '{lang_label}' exceeds {MAX_TITLE_LENGTH} characters. Skipping title for this language.")
+        return None
+    return title
+
 def build_workshop_page_updates(config, item_id, dev_mode=False, dev_name=None):
     """Collect source and translated workshop title/description payloads."""
     source_language = load_source_language(config)
@@ -1091,6 +1102,7 @@ def build_workshop_page_updates(config, item_id, dev_mode=False, dev_name=None):
     base_description = apply_workshop_item_id(base_description, item_id)
     base_description = trim_description(base_description, source_language)
     base_title = load_workshop_source_title(dev_mode=dev_mode, dev_name=dev_name)
+    base_title = enforce_title_length(base_title, source_language)
 
     updates = [{
         "lang": source_language,
@@ -1120,6 +1132,7 @@ def build_workshop_page_updates(config, item_id, dev_mode=False, dev_name=None):
         if title_text is None and desc_text is None:
             continue
 
+        title_text = enforce_title_length(title_text, lang)
         desc_text = trim_description(desc_text, lang)
         translations[lang] = {"title": title_text, "description": desc_text}
 
