@@ -305,6 +305,32 @@ def find_definition_in_file(text, name, kind, namespace=None):
             return (d.start_line, d.end_line)
     return None
 
+
+def _assert_unique_top_level_defs(text, path):
+    """Report duplicated top-level definitions in *text*.
+
+    Checks that no ``(kind, namespace, name)`` parsed from *text* is defined
+    more than once. A repeated definition, typically a top-level widget name
+    appearing twice, is the signature of a corrupted ``.gui`` file that EU5
+    fails to load. Prints an error for each duplicate and returns ``False``
+    when any is found, ``True`` when *text* is clean.
+    """
+    seen = {}
+    unique = True
+    for d in parse_gui_file(text, path):
+        sig = (d.kind, d.namespace, d.name)
+        first = seen.get(sig)
+        if first is None:
+            seen[sig] = d
+            continue
+        label = f"{d.kind} '{d.name}'"
+        if d.namespace:
+            label += f" ({d.namespace})"
+        print(f"  Error: Duplicate {label} in {path}: lines "
+              f"{first.start_line + 1} and {d.start_line + 1}.")
+        unique = False
+    return unique
+
 # ─── Git Helpers ──────────────────────────────────────────────────────────────
 
 def run_git(args, cwd=ROOT_DIR, check=True, env=None):
@@ -524,8 +550,12 @@ def _constant_tracking_key(mod_file, vanilla_file, name):
 
 # ─── Scanner ─────────────────────────────────────────────────────────────────
 
-def _scan_definitions(base_dir, source_dirs):
-    """Recursively parse all ``.gui`` files and return ``[GuiDefinition, …]``."""
+def _scan_definitions(base_dir, source_dirs, assert_unique=False):
+    """Recursively parse all ``.gui`` files and return ``[GuiDefinition, …]``.
+
+    With *assert_unique*, a file containing a duplicated top-level definition
+    aborts the run before its definitions are collected.
+    """
     all_defs = []
     for source in source_dirs:
         gui_dir = os.path.join(base_dir, source, "gui")
@@ -544,6 +574,11 @@ def _scan_definitions(base_dir, source_dirs):
                 except (OSError, UnicodeDecodeError) as e:
                     print(f"  Warning: Could not read {rel}: {e}")
                     continue
+                if assert_unique and not _assert_unique_top_level_defs(
+                        text, rel):
+                    print("Aborting: refusing to sync tracking from a "
+                          "corrupted mod file.")
+                    sys.exit(1)
                 all_defs.extend(parse_gui_file(text, rel))
     return all_defs
 
@@ -1186,7 +1221,7 @@ def cmd_merge(args):
         print("Skipping mod-state sync.")
     else:
         print("Syncing tracking files from current mod content...")
-        mod_defs = _scan_definitions(ROOT_DIR, GUI_SOURCES)
+        mod_defs = _scan_definitions(ROOT_DIR, GUI_SOURCES, assert_unique=True)
         mod_map = {}
         mod_consts = {}
         for d in mod_defs:
@@ -1454,12 +1489,17 @@ def cmd_apply(args):
             errors += 1
             continue
 
-        # Read mod file (preserve BOM + detect line endings)
+        # Read mod file (detect line endings; BOM is always restored on write).
         with open(abs_mod, "rb") as f:
             raw = f.read()
-        has_bom = raw.startswith(b"\xef\xbb\xbf")
         has_crlf = b"\r\n" in raw
         mod_text = raw.decode("utf-8-sig").replace("\r\n", "\n")
+        # Any U+FEFF past byte 0 is a corruption artifact.
+        mod_text = mod_text.replace("\ufeff", "")
+
+        if not _assert_unique_top_level_defs(mod_text, mod_file):
+            errors += 1
+            continue
 
         if key.startswith("constant:"):
             kind = "constant"
@@ -1480,10 +1520,14 @@ def cmd_apply(args):
         new_lines = lines[:start] + new_text.split("\n") + lines[end + 1:]
         result = "\n".join(new_lines)
 
+        if not _assert_unique_top_level_defs(result, mod_file):
+            errors += 1
+            continue
+
         if has_crlf:
             result = result.replace("\n", "\r\n")
 
-        new_raw = (b"\xef\xbb\xbf" if has_bom else b"") + result.encode("utf-8")
+        new_raw = b"\xef\xbb\xbf" + result.encode("utf-8")
         if new_raw == raw:
             continue
 
