@@ -1078,12 +1078,12 @@ def trim_description(text, lang_label):
     return text
 
 def enforce_title_length(title, lang_label):
-    """Drop the title when it exceeds MAX_TITLE_LENGTH characters and warn."""
+    """Drop the title when it exceeds MAX_TITLE_LENGTH bytes and warn."""
     if not title:
         return title
 
-    if len(title) > MAX_TITLE_LENGTH:
-        print(f"Warning: Title for '{lang_label}' exceeds {MAX_TITLE_LENGTH} characters. Skipping title for this language.")
+    if len(title.encode("utf-8")) > MAX_TITLE_LENGTH:
+        print(f"Warning: Title for '{lang_label}' exceeds {MAX_TITLE_LENGTH} bytes. Skipping title for this language.")
         return None
     return title
 
