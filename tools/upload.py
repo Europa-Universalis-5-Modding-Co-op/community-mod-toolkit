@@ -850,6 +850,14 @@ def _submit_and_wait(steam, handle, change_note="", show_progress=False):
 
     return True
 
+def _set_item_tags(workshop, handle, tags):
+    """Apply tags to an open item update handle."""
+    print(f"Setting Workshop tags: {', '.join(tags)}")
+    if workshop.SetItemTags(handle, tags) is False:
+        print("Error: SetItemTags failed.")
+        return False
+    return True
+
 def upload_release(steam, content_dir, preview_path, item_id, workshop_title=None, change_note="", tags=None):
     if not os.path.isdir(content_dir):
         print(f"Error: Release directory not found: {content_dir}")
@@ -867,12 +875,8 @@ def upload_release(steam, content_dir, preview_path, item_id, workshop_title=Non
             print("Error: SetItemTitle failed.")
             return False
 
-    if tags:
-        print(f"Setting Workshop tags: {', '.join(tags)}")
-        tags_result = workshop.SetItemTags(handle, tags)
-        if tags_result is False:
-            print("Error: SetItemTags failed.")
-            return False
+    if tags and not _set_item_tags(workshop, handle, tags):
+        return False
 
     content_result = workshop.SetItemContent(handle, content_dir)
     if content_result is False:
@@ -1176,7 +1180,7 @@ def build_change_notes_updates(config, item_id, version=None):
 
     return updates
 
-def upload_workshop_pages_for_item(steam, updates, item_id):
+def upload_workshop_pages_for_item(steam, updates, item_id, tags=None):
     """Upload workshop title/description updates for each language entry."""
     if updates is None:
         return False
@@ -1190,6 +1194,18 @@ def upload_workshop_pages_for_item(steam, updates, item_id):
         )
 
     workshop = steam.Workshop
+
+    if tags:
+        handle = workshop.StartItemUpdate(APP_ID, item_id)
+        if not handle:
+            print("Error: StartItemUpdate failed. Check app ID and item ID.")
+            return False
+        if not _set_item_tags(workshop, handle, tags):
+            return False
+        if not _submit_and_wait(steam, handle):
+            print("Error: Workshop tags update failed.")
+            return False
+
     for update in updates:
         handle = workshop.StartItemUpdate(APP_ID, item_id)
         if not handle:
@@ -1231,7 +1247,7 @@ def parse_args():
     parser.add_argument(
         "-wp", "--workshop-pages",
         action="store_true",
-        help="Upload Workshop title/description pages only. When set, config default target settings and upload_only_on_version_change are ignored."
+        help="Upload Workshop page metadata (title, description, tags) only. When set, config default target settings and upload_only_on_version_change are ignored."
     )
     parser.add_argument(
         "-d", "--dev",
@@ -1306,6 +1322,7 @@ def main():
     main_tags = []
     if upload_mod_effective:
         release_dir, preview_path, workshop_title = build_release(dev_mode=args.dev, dev_name=dev_name)
+    if upload_mod_effective or upload_workshop_pages:
         main_tags = load_workshop_tags(METADATA_PATH, "main mod")
 
     uploaded_main = False
@@ -1336,7 +1353,8 @@ def main():
             )
             if page_updates is None:
                 return 1
-            if not upload_workshop_pages_for_item(steam, page_updates, item_id):
+            page_tags = [] if uploaded_main else main_tags
+            if not upload_workshop_pages_for_item(steam, page_updates, item_id, tags=page_tags):
                 return 1
             if upload_only_on_version_change:
                 set_uploaded_version(version_cache, main_cache_key, main_version)
