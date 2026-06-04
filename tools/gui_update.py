@@ -1230,7 +1230,6 @@ def cmd_check(args):
 
 
 def cmd_merge(args):
-    game_dir = _resolve_game_dir(args)
     manifest = _load_manifest()
     if manifest is None:
         print("Not initialized. Run 'gui_update.py init' first.")
@@ -1246,6 +1245,11 @@ def cmd_merge(args):
     just_advanced = _advance_merged_ref_if_absorbed()
     vanilla_sha = run_git(["rev-parse", VANILLA_BRANCH])
     merged_sha = run_git(["rev-parse", MERGED_BRANCH])
+    # An unfinished merge leaves gui/vanilla ahead of gui/vanilla-merged.
+    # Resuming reuses that tip and skips the game scan.
+    resuming = vanilla_sha != merged_sha
+    if not resuming:
+        game_dir = _resolve_game_dir(args)
 
     # Sync tracking from mod state. Skip if just advanced — tracking holds
     # the resolution and mod files may still be pre-apply.
@@ -1314,55 +1318,53 @@ def cmd_merge(args):
         else:
             print("  Tracking already in sync with mod.")
 
-    # Build the new vanilla snapshot from current game files.
-    print("Scanning current vanilla GUI files...")
-    vanilla_defs = _scan_definitions(game_dir, GUI_SOURCES)
-    vanilla_map = {}
-    vanilla_consts = {}
-    for d in vanilla_defs:
-        if d.kind == "constant":
-            vanilla_consts.setdefault((d.source_file, d.name), d)
-        else:
-            vanilla_map.setdefault(_tracking_key(d.kind, d.name), d)
+    if resuming:
+        print(f"{VANILLA_BRANCH} is ahead of {MERGED_BRANCH} from an "
+              "unfinished merge; resuming it without re-scanning vanilla.")
+        new_vanilla_sha = vanilla_sha
+        version = _last_vanilla_commit_version()
+    else:
+        # Build the new vanilla snapshot from current game files.
+        print("Scanning current vanilla GUI files...")
+        vanilla_defs = _scan_definitions(game_dir, GUI_SOURCES)
+        vanilla_map = {}
+        vanilla_consts = {}
+        for d in vanilla_defs:
+            if d.kind == "constant":
+                vanilla_consts.setdefault((d.source_file, d.name), d)
+            else:
+                vanilla_map.setdefault(_tracking_key(d.kind, d.name), d)
 
-    tracking_files = {}
-    updated = 0
-    for key, entry in manifest["definitions"].items():
-        tp = entry["tracking_path"]
-        if key.startswith("constant:"):
-            vd = vanilla_consts.get((entry["vanilla_file"], entry["name"]))
-        else:
-            vd = vanilla_map.get(key)
-        if vd is not None:
-            header = _make_tracking_header(
-                entry["vanilla_file"], entry["mod_file"])
-            new_content = header + vd.text + "\n"
-            old_content = _read_from_branch(VANILLA_BRANCH, tp)
-            tracking_files[tp] = new_content
-            if (old_content is None
-                    or _body_hash(old_content) != _body_hash(new_content)):
-                updated += 1
+        tracking_files = {}
+        updated = 0
+        for key, entry in manifest["definitions"].items():
+            tp = entry["tracking_path"]
+            if key.startswith("constant:"):
+                vd = vanilla_consts.get((entry["vanilla_file"], entry["name"]))
+            else:
+                vd = vanilla_map.get(key)
+            if vd is not None:
+                header = _make_tracking_header(
+                    entry["vanilla_file"], entry["mod_file"])
+                new_content = header + vd.text + "\n"
+                old_content = _read_from_branch(VANILLA_BRANCH, tp)
+                tracking_files[tp] = new_content
+                if (old_content is None
+                        or _body_hash(old_content) != _body_hash(new_content)):
+                    updated += 1
 
-    # Bookmark behind vanilla without a HEAD merge means the previous run was aborted; re-run.
-    behind_vanilla = vanilla_sha != merged_sha
+        if updated == 0:
+            print("Vanilla branch already up to date. Nothing to merge.")
+            return 0
 
-    if updated == 0 and not behind_vanilla:
-        print("Vanilla branch already up to date. Nothing to merge.")
-        return 0
-
-    if updated > 0:
         version = _resolve_game_version(args, is_init=False)
-        print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) changed)...")
+        print(f"Updating {VANILLA_BRANCH} ({updated} definition(s) "
+              "changed)...")
         new_vanilla_sha = _update_vanilla_branch(
             tracking_files,
             f"Update {updated} vanilla GUI definition(s)",
             version=version,
             beta=getattr(args, "beta", False))
-    else:
-        print(f"{VANILLA_BRANCH} has unmerged commits from a previous "
-              "run; resuming merge.")
-        new_vanilla_sha = vanilla_sha
-        version = _last_vanilla_commit_version()
 
     # Per-file three-way merge using gui/vanilla-merged as base and
     # gui/vanilla as theirs.
