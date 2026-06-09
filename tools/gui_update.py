@@ -790,14 +790,13 @@ def _body_hash(content):
 
 
 def _write_tracking_file(rel_path, content):
-    """Write a tracking file under ROOT_DIR with UTF-8 BOM + CRLF."""
+    """Write a tracking file under ROOT_DIR with UTF-8 BOM + LF."""
     abs_path = os.path.join(ROOT_DIR, rel_path.replace("/", os.sep))
     os.makedirs(os.path.dirname(abs_path), exist_ok=True)
     if content.startswith("﻿"):
         content = content[1:]
     normalized = content.replace("\r\n", "\n").replace("\r", "\n")
-    new_bytes = (b"\xef\xbb\xbf"
-                 + normalized.replace("\n", "\r\n").encode("utf-8"))
+    new_bytes = b"\xef\xbb\xbf" + normalized.encode("utf-8")
     if os.path.exists(abs_path):
         with open(abs_path, "rb") as f:
             if f.read() == new_bytes:
@@ -1685,10 +1684,9 @@ def cmd_apply(args):
             errors += 1
             continue
 
-        # Read mod file (detect line endings; BOM is always restored on write).
+        # Read mod file; BOM is restored on write.
         with open(abs_mod, "rb") as f:
             raw = f.read()
-        has_crlf = b"\r\n" in raw
         mod_text = raw.decode("utf-8-sig").replace("\r\n", "\n")
         # Any U+FEFF past byte 0 is a corruption artifact.
         mod_text = mod_text.replace("\ufeff", "")
@@ -1719,9 +1717,6 @@ def cmd_apply(args):
         if not _assert_unique_top_level_defs(result, mod_file):
             errors += 1
             continue
-
-        if has_crlf:
-            result = result.replace("\n", "\r\n")
 
         new_raw = b"\xef\xbb\xbf" + result.encode("utf-8")
         if new_raw == raw:

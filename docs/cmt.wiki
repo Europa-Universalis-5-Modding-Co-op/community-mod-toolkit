@@ -44,9 +44,9 @@ The toolkit includes pre-configured <code>.editorconfig</code>, <code>.gitattrib
 {| class="wikitable"
 ! File !! What It Does
 |-
-| <code>.editorconfig</code> || Automatically sets UTF-8 BOM encoding on <code>.txt</code>, <code>.yml</code>, and <code>.gui</code> files, CRLF line endings, and correct indentation (tabs for script, 1-space for localization YAML).
+| <code>.editorconfig</code> || Automatically sets UTF-8 BOM encoding on <code>.txt</code>, <code>.yml</code>, and <code>.gui</code> files, LF line endings, and indentation (tabs for script, 1-space for localization YAML) to match Paradox's style.
 |-
-| <code>.gitattributes</code> || Normalizes line endings at the Git level so contributors on any OS get correct CRLF/LF handling.
+| <code>.gitattributes</code> || Similar to editorconfig just acting on git.
 |-
 | <code>.gitignore</code> || Excludes IDE directories, <code>.env</code> (API keys), Python cache, and other files that shouldn't be committed.
 |-
