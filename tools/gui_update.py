@@ -1212,6 +1212,14 @@ def cmd_init(args):
     return 0
 
 
+def _paths_suffix(key, mod_file, vanilla_file):
+    """Return the path suffix for a check report line. Constant keys
+    already embed both paths."""
+    if key.startswith("constant:"):
+        return ""
+    return f"  (mod: {mod_file}, vanilla: {vanilla_file})"
+
+
 def cmd_check(args):
     game_dir = _resolve_game_dir(args)
     manifest = _load_manifest()
@@ -1293,21 +1301,28 @@ def cmd_check(args):
     if changed:
         print(f"\n{len(changed)} definition(s) changed in vanilla:")
         for key, entry in changed:
-            print(f"  {key}  (in {entry['vanilla_file']})")
+            paths = _paths_suffix(key, entry["mod_file"],
+                                  entry["vanilla_file"])
+            print(f"  {key}{paths}")
     if removed:
         print(f"\n{len(removed)} tracked definition(s) removed from vanilla "
               "(overrides now orphaned):")
         for key, entry in removed:
-            print(f"  ! {key}  (overridden in {entry['mod_file']})")
+            paths = _paths_suffix(key, entry["mod_file"],
+                                  entry["vanilla_file"])
+            print(f"  ! {key}{paths}")
     if added:
         print(f"\n{len(added)} new override(s) in the mod, not yet tracked:")
         for key in added:
-            md, _vd = discovered[key]
-            print(f"  {key}  (in {md.source_file})")
+            md, vd = discovered[key]
+            paths = _paths_suffix(key, md.source_file, vd.source_file)
+            print(f"  {key}{paths}")
     if deleted:
         print(f"\n{len(deleted)} tracked override(s) no longer in the mod:")
         for key, entry in deleted:
-            print(f"  {key}  (was in {entry['mod_file']})")
+            paths = _paths_suffix(key, entry["mod_file"],
+                                  entry["vanilla_file"])
+            print(f"  {key}{paths}")
 
     if pending_merge:
         print(f"\nNote: {VANILLA_BRANCH} is ahead of {MERGED_BRANCH} from a "
