@@ -121,13 +121,13 @@ def load_workshop_item_id(config, key, label):
 
     return _parse_int(upload_item_id, label, allow_zero=True)
 
-def load_dev_name(config):
-    """Load an optional dev mod name override from config data."""
-    dev_name = config.get("workshop_dev_name")
-    if dev_name is None:
+def load_name_override(config, key):
+    """Load an optional mod name override from config data."""
+    name = config.get(key)
+    if name is None:
         return None
-    dev_name = str(dev_name).strip()
-    return dev_name if dev_name else None
+    name = str(name).strip()
+    return name if name else None
 
 def load_source_language(config):
     """Load and validate source_language used for workshop page uploads."""
@@ -702,7 +702,7 @@ def _normalize_release_title(raw_name):
         title = title[:-4].rstrip()
     return title.strip()
 
-def build_release(dev_mode=False, dev_name=None):
+def build_release(dev_mode=False, dev_name=None, workshop_name=None):
     # --- Generate Release Folder Name ---
     dev_meta_path = os.path.join(ROOT_DIR, ".metadata", "metadata.json")
 
@@ -712,11 +712,12 @@ def build_release(dev_mode=False, dev_name=None):
 
         raw_name = meta_data["name"]
         resolved_dev_name = dev_name if dev_mode and dev_name else raw_name
-        workshop_title = (
-            str(resolved_dev_name).strip()
-            if dev_mode
-            else _normalize_release_title(raw_name)
-        )
+        if dev_mode:
+            workshop_title = str(resolved_dev_name).strip()
+        elif workshop_name:
+            workshop_title = workshop_name
+        else:
+            workshop_title = _normalize_release_title(raw_name)
         base_name = resolved_dev_name if dev_mode else raw_name
         clean_name = base_name.removesuffix(" Dev")
 
@@ -988,8 +989,11 @@ def load_change_notes(path, item_id, version=None):
         return ""
     return apply_workshop_item_id(entry, item_id)
 
-def load_workshop_source_title(dev_mode=False, dev_name=None):
-    """Load workshop title from metadata, applying dev/release naming rules."""
+def load_workshop_source_title(dev_mode=False, dev_name=None, workshop_name=None):
+    """Resolve the workshop title from config overrides or metadata."""
+    if not dev_mode and workshop_name:
+        return workshop_name
+
     try:
         with open(METADATA_PATH, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
@@ -1091,7 +1095,7 @@ def enforce_title_length(title, lang_label, fallback=None):
         return None
     return title
 
-def build_workshop_page_updates(config, item_id, dev_mode=False, dev_name=None):
+def build_workshop_page_updates(config, item_id, dev_mode=False, dev_name=None, workshop_name=None):
     """Collect source and translated workshop title/description payloads."""
     source_language = load_source_language(config)
     if source_language is None:
@@ -1105,7 +1109,7 @@ def build_workshop_page_updates(config, item_id, dev_mode=False, dev_name=None):
     base_description = split_workshop_description(base_description)
     base_description = apply_workshop_item_id(base_description, item_id)
     base_description = trim_description(base_description, source_language)
-    base_title = load_workshop_source_title(dev_mode=dev_mode, dev_name=dev_name)
+    base_title = load_workshop_source_title(dev_mode=dev_mode, dev_name=dev_name, workshop_name=workshop_name)
     base_title = enforce_title_length(base_title, source_language)
 
     updates = [{
@@ -1326,7 +1330,8 @@ def main():
     item_id_key = "workshop_upload_item_id_dev" if args.dev else "workshop_upload_item_id"
     item_label = "dev item id" if args.dev else "item id"
     item_id = None
-    dev_name = load_dev_name(config) if args.dev else None
+    dev_name = load_name_override(config, "workshop_dev_name") if args.dev else None
+    workshop_name = load_name_override(config, "workshop_name") if not args.dev else None
 
     if upload_mod_effective or upload_workshop_pages or upload_change_notes:
         item_id = load_workshop_item_id(config, item_id_key, item_label)
@@ -1338,7 +1343,7 @@ def main():
     workshop_title = None
     main_tags = []
     if upload_mod_effective:
-        release_dir, preview_path, workshop_title = build_release(dev_mode=args.dev, dev_name=dev_name)
+        release_dir, preview_path, workshop_title = build_release(dev_mode=args.dev, dev_name=dev_name, workshop_name=workshop_name)
     if upload_mod_effective or upload_workshop_pages:
         main_tags = load_workshop_tags(METADATA_PATH, "main mod")
 
@@ -1367,6 +1372,7 @@ def main():
                 item_id,
                 dev_mode=args.dev,
                 dev_name=dev_name,
+                workshop_name=workshop_name,
             )
             if page_updates is None:
                 return 1

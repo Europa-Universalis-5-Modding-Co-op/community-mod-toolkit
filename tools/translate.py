@@ -121,7 +121,7 @@ def _parse_positive_int(value, label):
 
 def load_config(config_path):
 	"""Load config.toml and validate required keys and values."""
-	invalid = (None,) * 12
+	invalid = (None,) * 13
 
 	if not os.path.exists(config_path):
 		print(f"Error: Config file not found: {config_path}")
@@ -237,6 +237,12 @@ def load_config(config_path):
 		return invalid
 	gemini_additional_context = gemini_additional_context.strip()
 
+	workshop_name = data.get("workshop_name", "")
+	if not isinstance(workshop_name, str):
+		print("Error: workshop_name must be a string.")
+		return invalid
+	workshop_name = workshop_name.strip() or None
+
 	# Defer validation — only required when workshop pages are actually translated.
 	workshop_item_id = None
 	raw_item_id = data.get("workshop_upload_item_id")
@@ -255,7 +261,8 @@ def load_config(config_path):
 		workshop_title_translator,
 		gemini_title_system_prompt,
 		gemini_additional_context,
-		workshop_item_id
+		workshop_item_id,
+		workshop_name
 	)
 
 def parse_args():
@@ -293,7 +300,7 @@ def resolve_translate_targets(args, translate_workshop_by_default, translate_sub
 	# No flags: use config defaults (mod localization always on).
 	return True, translate_workshop_by_default, translate_submods_default, translate_cn_default
 
-def build_translation_targets(include_submods):
+def build_translation_targets(include_submods, workshop_name=None):
 	"""Build translation targets for the main mod and optional submods."""
 	targets = [
 		{
@@ -304,7 +311,8 @@ def build_translation_targets(include_submods):
 			"workshop_description_path": WORKSHOP_DESCRIPTION_PATH,
 			"workshop_translations_dir": WORKSHOP_TRANSLATIONS_DIR,
 			"workshop_template_path": WORKSHOP_TRANSLATION_TEMPLATE_PATH,
-			"change_notes_path": CHANGE_NOTES_PATH
+			"change_notes_path": CHANGE_NOTES_PATH,
+			"title_override": workshop_name
 		}
 	]
 
@@ -330,7 +338,8 @@ def build_translation_targets(include_submods):
 				"workshop_description_path": os.path.join(workshop_dir, "workshop-description.bbcode"),
 				"workshop_translations_dir": translations_dir,
 				"workshop_template_path": os.path.join(translations_dir, "translation_template.txt"),
-				"change_notes_path": os.path.join(workshop_dir, "change-notes.bbcode")
+				"change_notes_path": os.path.join(workshop_dir, "change-notes.bbcode"),
+				"title_override": None
 			}
 		)
 
@@ -1365,7 +1374,8 @@ def translate_workshop_assets(
 	main_workshop_template_path,
 	change_notes_path,
 	log_prefix,
-	translate_pages=True
+	translate_pages=True,
+	title_override=None
 ):
 	"""Translate workshop titles/descriptions and/or change notes."""
 	title = None
@@ -1378,7 +1388,7 @@ def translate_workshop_assets(
 			print(f"{log_prefix}Workshop description not found: {workshop_description_path}; skipping workshop page translations.")
 			return False
 
-		title = load_workshop_title(metadata_path)
+		title = title_override if title_override else load_workshop_title(metadata_path)
 		raw_description = load_workshop_description(workshop_description_path)
 		translatable_description, _ = split_workshop_description(raw_description)
 		description = apply_workshop_item_id(translatable_description, workshop_item_id)
@@ -1423,7 +1433,13 @@ def translate_workshop_assets(
 		change_notes_hash = hash_text(change_notes)
 		change_notes_changed = workshop_cache.get("change_notes_hash") != change_notes_hash or change_notes_translator_changed
 
+	title_changed = False
+	title_hash = None
 	title_translator_changed = workshop_cache.get("title_translator") != workshop_title_translator
+	if title is not None:
+		title_hash = hash_text(title)
+		title_changed = workshop_cache.get("title_hash") != title_hash or title_translator_changed
+
 	template_hash = hash_text(translation_template) if translation_template is not None else None
 	template_changed = template_hash != workshop_cache.get("template_hash")
 
@@ -1446,7 +1462,7 @@ def translate_workshop_assets(
 		cached_description = cache_entry.get("description")
 
 		if title:
-			if cached_title is None or title_translator_changed:
+			if cached_title is None or title_changed:
 				provider_label = "gemini-3-flash" if workshop_title_translator == "gemini-3-flash" else "deepl"
 				print(f"{log_prefix}Translating workshop title -> {folder_name} ({provider_label})...")
 				if workshop_title_translator == "gemini-3-flash":
@@ -1569,7 +1585,8 @@ def translate_workshop_assets(
 		workshop_cache["change_notes_translator"] = workshop_description_translator
 		cache_changed = True
 
-	if title_success and workshop_cache.get("title_translator") != workshop_title_translator:
+	if title is not None and title_changed and title_success:
+		workshop_cache["title_hash"] = title_hash
 		workshop_cache["title_translator"] = workshop_title_translator
 		cache_changed = True
 
@@ -1599,7 +1616,8 @@ def main():
 		workshop_title_translator,
 		gemini_title_system_prompt,
 		gemini_additional_context,
-		workshop_item_id
+		workshop_item_id,
+		workshop_name
 	) = load_config(CONFIG_PATH)
 	if not source_language:
 		return
@@ -1626,7 +1644,7 @@ def main():
 		print("Error: workshop_upload_item_id must be a positive integer in config.toml for workshop page translation.")
 		return
 
-	targets = build_translation_targets(include_submods)
+	targets = build_translation_targets(include_submods, workshop_name)
 	if include_submods:
 		active_submods = {target["cache_key"] for target in targets if target["cache_key"] != "main"}
 		submods_cache = hash_data.get("submods")
@@ -1727,7 +1745,8 @@ def main():
 				WORKSHOP_TRANSLATION_TEMPLATE_PATH,
 				target["change_notes_path"] if translate_cn else None,
 				log_prefix,
-				translate_pages=translate_wp
+				translate_pages=translate_wp,
+				title_override=target["title_override"]
 			) or hashes_modified
 
 	# Write cache only if something changed.
