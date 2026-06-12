@@ -103,6 +103,13 @@ LOCK_RE = re.compile(r'#\s*LOCK\b')
 XML_PLACEHOLDER_TAG = "locvar"
 DEEPL_SPLIT_SENTENCES_LOCALIZATION = deepl.api_data.SplitSentences.OFF
 
+GEMINI_LOC_MAX_ATTEMPTS = 3
+GEMINI_LOC_LENGTH_FLOOR = 80
+GEMINI_LOC_LENGTH_RATIO = 8
+LEAKED_LOC_HEADER_RE = re.compile(r'(?:^|\\n)\s*l_[a-z_]+:')
+LEAKED_LOC_KEY_RE = re.compile(r'(?:^|\\n)\s*[A-Za-z0-9_.\-]+:\d+\s*"')
+BARE_QUOTE_RE = re.compile(r'(?<!\\)"')
+
 # ==========================================
 # LOGIC
 # ==========================================
@@ -591,25 +598,24 @@ def cleanup_text(text):
 	text = text.replace('[[', '[').replace(']]', ']') # Fix double brackets
 	return text.strip()
 
+def escape_bare_quotes(text):
+	"""
+	Escapes unescaped double quotes in a translated localization value.
+	"""
+	return BARE_QUOTE_RE.sub(r'\\"', text)
+
 def should_auto_skip(masked_text):
 	"""
 	Returns True if the line should be skipped.
-	Conditions:
-	1. Line is empty or whitespace.
-	2. Line consists only of placeholders and punctuation (e.g., "[VAR_0]").
+	Skips lines that are empty and lines with no letters outside placeholders.
 	"""
-	# 1. Check for empty/whitespace only
 	if not masked_text.strip():
 		return True
 
-	# 2. Remove all [VAR_x] tags
 	stripped = re.sub(r'\[VAR_\d+\]', '', masked_text)
 
-	# 3. Remove standard punctuation and whitespace
-	stripped = re.sub(r'[ \t\.,!?:;]', '', stripped)
-
-	# If nothing is left, it was only placeholders/punctuation
-	return len(stripped) == 0
+	# [^\W\d_] matches any Unicode letter.
+	return re.search(r'[^\W\d_]', stripped) is None
 
 def parse_source_entries(lines):
 	"""
@@ -644,6 +650,23 @@ def parse_source_entries(lines):
 
 	return entries
 
+def find_gemini_localization_defect(translated_text, masked_text, placeholders):
+	"""
+	Returns why a Gemini response is unusable as a localization value, or None if it is usable.
+	"""
+	if LEAKED_LOC_HEADER_RE.search(translated_text):
+		return "contains a localization language header"
+	if LEAKED_LOC_KEY_RE.search(translated_text):
+		return "contains localization key lines"
+	if "```" in translated_text:
+		return "contains a markdown code fence"
+	if r"\n" in translated_text and r"\n" not in placeholders:
+		return "adds line breaks the source does not have"
+	length_cap = max(GEMINI_LOC_LENGTH_FLOOR, GEMINI_LOC_LENGTH_RATIO * len(masked_text))
+	if len(translated_text) > length_cap:
+		return f"is {len(translated_text)} characters for a {len(masked_text)} character source"
+	return None
+
 def translate_localization_value_gemini(
 	masked_text,
 	placeholders,
@@ -662,16 +685,30 @@ def translate_localization_value_gemini(
 		]
 	}
 
-	response = _gemini_generate_content(payload)
-	if response is None:
+	translated_text = None
+	defect = None
+	for attempt in range(1, GEMINI_LOC_MAX_ATTEMPTS + 1):
+		response = _gemini_generate_content(payload)
+		if response is None:
+			return None
+
+		translated_text = _gemini_extract_text(response)
+		if translated_text is None:
+			print("  [Error] Gemini API returned no text.")
+			return None
+
+		translated_text = normalize_localization_linebreaks(translated_text.strip())
+		defect = find_gemini_localization_defect(translated_text, masked_text, placeholders)
+		if defect is None:
+			break
+		print(
+			f"  [WARNING] {target_folder_name} rejected Gemini output for '{key}' "
+			f"on attempt {attempt}/{GEMINI_LOC_MAX_ATTEMPTS}: {defect}."
+		)
+
+	if defect is not None:
 		return None
 
-	translated_text = _gemini_extract_text(response)
-	if translated_text is None:
-		print("  [Error] Gemini API returned no text.")
-		return None
-
-	translated_text = normalize_localization_linebreaks(translated_text)
 	missing = missing_placeholder_indices(translated_text, placeholders)
 	if missing:
 		missing_tags = [placeholders[i] for i in missing]
@@ -691,7 +728,8 @@ def translate_value(
 	no_translate,
 	localization_translator,
 	gemini_localization_system_prompt,
-	gemini_additional_context=""
+	gemini_additional_context="",
+	failed_keys=None
 ):
 	"""
 	Translate a single value with tag masking and validation.
@@ -716,9 +754,11 @@ def translate_value(
 			gemini_additional_context
 		)
 		if translated_text is None:
-			print(f"  [Error] Failed to translate line: {key} (Gemini request failed)")
+			print(f"  [Error] Failed to translate line: {key} (no usable Gemini translation)")
+			if failed_keys is not None:
+				failed_keys.add(key)
 			return original_value
-		return translated_text
+		return escape_bare_quotes(translated_text)
 
 	try:
 		split_sentences = DEEPL_SPLIT_SENTENCES_LOCALIZATION if placeholders else None
@@ -758,10 +798,12 @@ def translate_value(
 			translated_text = insert_missing_placeholders(translated_text, placeholders, missing)
 
 		translated_text = cleanup_text(translated_text)
-		return translated_text
+		return escape_bare_quotes(translated_text)
 
 	except Exception as e:
 		print(f"  [Error] Failed to translate line: {key} ({e})")
+		if failed_keys is not None:
+			failed_keys.add(key)
 		return original_value
 
 def build_line(indent, key, text, comment):
@@ -823,7 +865,8 @@ def update_target_lines(
 	target_folder_name,
 	localization_translator,
 	gemini_localization_system_prompt,
-	gemini_additional_context=""
+	gemini_additional_context="",
+	failed_keys=None
 ):
 	"""
 	Update only keys that changed in the source (or are missing in the target).
@@ -848,7 +891,8 @@ def update_target_lines(
 			entry["no_translate"],
 			localization_translator,
 			gemini_localization_system_prompt,
-			gemini_additional_context
+			gemini_additional_context,
+			failed_keys
 		)
 
 		if key in target_index:
@@ -886,7 +930,8 @@ def translate_source_lines(
 	source_lang_deepl,
 	localization_translator,
 	gemini_localization_system_prompt,
-	gemini_additional_context=""
+	gemini_additional_context="",
+	failed_keys=None
 ):
 	"""
 	Translate a full source file into a new target file.
@@ -942,7 +987,8 @@ def translate_source_lines(
 				self_ref,
 				localization_translator,
 				gemini_localization_system_prompt,
-				gemini_additional_context
+				gemini_additional_context,
+				failed_keys
 			)
 
 			new_lines.append(build_line(indent, key, translated_text, comment))
@@ -966,7 +1012,8 @@ def process_file(
 	localization_translator,
 	gemini_localization_system_prompt,
 	gemini_additional_context,
-	log_prefix
+	log_prefix,
+	failed_keys=None
 ):
 	"""Translate/update one localization file for a single target language."""
 	filename = os.path.basename(source_filepath)
@@ -992,7 +1039,8 @@ def process_file(
 			source_lang_deepl,
 			localization_translator,
 			gemini_localization_system_prompt,
-			gemini_additional_context
+			gemini_additional_context,
+			failed_keys
 		)
 		with open(target_filepath, 'w', encoding='utf-8-sig', newline='\n') as f:
 			f.writelines(new_lines)
@@ -1035,7 +1083,8 @@ def process_file(
 		target_folder_name,
 		localization_translator,
 		gemini_localization_system_prompt,
-		gemini_additional_context
+		gemini_additional_context,
+		failed_keys
 	) or file_changed
 
 	if file_changed:
@@ -1690,6 +1739,7 @@ def main():
 							if prev_hashes.get(key) != current_hash:
 								changed_keys.add(key)
 
+						failed_keys = set()
 						for folder_name, deepl_code in TARGET_LANGUAGES.items():
 							if folder_name == source_language:
 								continue
@@ -1707,8 +1757,15 @@ def main():
 								localization_translator,
 								gemini_localization_system_prompt,
 								gemini_additional_context,
-								log_prefix
+								log_prefix,
+								failed_keys
 							)
+
+						# Uncached keys are retried on the next run.
+						if failed_keys:
+							print(f"{log_prefix}  {len(failed_keys)} key(s) in {file} failed to translate; they will be retried on the next run.")
+							for failed_key in failed_keys:
+								source_hashes.pop(failed_key, None)
 
 						# Persist updated hashes for this file.
 						if prev_hashes != source_hashes:
