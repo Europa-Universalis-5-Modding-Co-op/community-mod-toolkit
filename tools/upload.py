@@ -142,7 +142,7 @@ def load_version_card(config):
     match = WORKSHOP_VERSION_CARD_RE.match(raw)
     if match is None:
         print(f"Error: Invalid workshop_version_card '{raw}'.")
-        print('Supported formats: "1.2", "1.2 & 1.3", "1.2-1.4"')
+        print('Supported formats: "1.x", "1.x & 1.y", "1.x-1.y"')
         return None
 
     first, separator, second = match.groups()
