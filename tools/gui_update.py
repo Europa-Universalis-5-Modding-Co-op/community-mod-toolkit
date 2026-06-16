@@ -1473,8 +1473,13 @@ def cmd_check(args):
         hints.append("Run 'gui_update.py merge' to incorporate these "
                      "changes.")
     elif added or deleted:
-        hints.append("Run 'gui_update.py merge' to track new and prune "
+        hints.append("Run 'gui_update.py refresh' to track new and prune "
                      "removed overrides.")
+        if added:
+            hints.append("If the new override(s) above were written against "
+                         "an earlier game version, it is highly recommended "
+                         "to downgrade to that version before refreshing, "
+                         "then update and merge.")
     if pending:
         hints.append("Run 'gui_update.py apply' to insert pending "
                      "definitions.")
