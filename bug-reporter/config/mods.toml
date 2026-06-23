@@ -1,0 +1,20 @@
+# Live bug-reporter configuration. deploy.py reads this to render wrangler.toml,
+# and rewrites it from your answers when you run the wizard. No secrets here
+# (see config/mods.template.toml for the field reference and README.md for setup).
+
+site_domain = "report.example.com"
+saves_domain = "saves.example.com"
+turnstile_sitekey = "0x4AAAAAAA_replace_me"
+max_upload_bytes = 524288000
+presign_expiry_seconds = 2400
+rate_limit_max = 5
+rate_limit_window_seconds = 3600
+default_labels = ["bug"]
+compress_in_browser = false
+
+[[mods]]
+id = "example-mod"
+display_name = "Example Mod"
+repo = "your-org/example-mod"
+labels = ["bug"]
+webhook_env = "DISCORD_WEBHOOK_EXAMPLEMOD"

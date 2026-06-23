@@ -1,0 +1,40 @@
+# Bug-reporter configuration. Copy to mods.toml and fill in, or let deploy.py
+# write it from your answers. No secrets belong here: the Turnstile secret,
+# GitHub App key, R2 keys, and Discord webhooks go to Cloudflare as secrets
+# (see README.md).
+
+# Domain serving the reporter page and /api/*, no scheme.
+site_domain = "report.example.com"
+
+# Public-read domain mapped to the R2 bucket; saves download from here, no scheme.
+saves_domain = "saves.example.com"
+
+# Public half of the Turnstile keypair. The secret half is a Cloudflare secret.
+turnstile_sitekey = "0x4AAAAAAA_replace_me"
+
+# Largest accepted upload, bytes. EU5 saves reach ~435 MB; 500 MB leaves headroom.
+max_upload_bytes = 524288000
+
+# Presigned-PUT lifetime, seconds. Must outlast a full upload on a slow link.
+presign_expiry_seconds = 2400
+
+# Presigns granted per IP within rate_limit_window_seconds before a 429.
+rate_limit_max = 5
+rate_limit_window_seconds = 3600
+
+# Added to every filed issue, on top of any per-mod labels.
+default_labels = ["bug"]
+
+# Enable only if gzip meaningfully shrinks a real .eu5 (see README.md).
+compress_in_browser = false
+
+# One block per mod. id is the ?mod= value in the report link.
+[[mods]]
+id = "example-mod"
+display_name = "Example Mod"
+# GitHub repo that receives the issues, "owner/name".
+repo = "your-org/example-mod"
+# Merged with default_labels.
+labels = ["bug"]
+# Name of the Discord webhook secret pushed via `wrangler secret put`.
+webhook_env = "DISCORD_WEBHOOK_EXAMPLEMOD"

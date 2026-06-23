@@ -1,0 +1,21 @@
+# Copy to .dev.vars for local `wrangler dev`. Never commit .dev.vars.
+# These mirror the Cloudflare secrets; in production they are set with
+# `wrangler secret put`, not from a file.
+
+# Turnstile siteverify secret. The value below is Cloudflare's always-passes
+# test secret; pair it with the always-passes test site key in wrangler.toml.
+TURNSTILE_SECRET="1x0000000000000000000000000000000AA"
+
+# GitHub App credentials. The private key is one line with literal \n escapes.
+GH_APP_ID="000000"
+GH_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n"
+
+# Optional: skip the App flow entirely with a fine-grained PAT (Issues: write).
+# GH_PAT="github_pat_..."
+
+# R2 S3 API token for presigning. Account id and bucket are vars in wrangler.toml.
+R2_ACCESS_KEY_ID="replace_me"
+R2_SECRET_ACCESS_KEY="replace_me"
+
+# One per mod, named by the mod's webhook_env in config/mods.toml.
+DISCORD_WEBHOOK_EXAMPLEMOD="https://discord.com/api/webhooks/000/aaa"

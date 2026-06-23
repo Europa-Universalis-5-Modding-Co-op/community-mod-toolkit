@@ -89,6 +89,7 @@ jobs:
           git rm -rf docs/
           git rm -f assets/images/mod-id-location.png
           git rm -rf .github/
+          git rm -rf bug-reporter/
           git mv -f README-TEMPLATE.md README.md
 
           # Reset Workshop item ID

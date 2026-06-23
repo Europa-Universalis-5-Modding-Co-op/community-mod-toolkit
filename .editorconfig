@@ -22,3 +22,8 @@ indent_size = 1
 [*.bbcode]
 indent_style = space
 indent_size = 1
+
+[*.{html,css,js,json,toml}]
+charset = utf-8
+indent_style = space
+indent_size = 2

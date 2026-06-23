@@ -1,0 +1,37 @@
+# Rendered to wrangler.toml by deploy.py. Edit this template and config/mods.toml,
+# then re-run the wizard; do not hand-edit the generated wrangler.toml. Values
+# wrapped in __NAME__ are filled by the wizard. Secrets never live here.
+
+name = "__WORKER_NAME__"
+main = "worker/src/index.js"
+compatibility_date = "2024-11-01"
+
+# Serves /api/* on the report domain. Pages serves the static page on the same
+# host; this route takes the API paths.
+routes = [
+  { pattern = "__SITE_DOMAIN__/api/*", zone_name = "__ZONE_NAME__" }
+]
+
+# Binding for the finalize-time HEAD/size check on the uploaded object.
+[[r2_buckets]]
+binding = "SAVES_BUCKET"
+bucket_name = "__R2_BUCKET__"
+
+# Pending upload records, rate-limit counters, and cached GitHub tokens.
+[[kv_namespaces]]
+binding = "KV"
+id = "__KV_ID__"
+
+[vars]
+SITE_DOMAIN = "__SITE_DOMAIN__"
+SAVES_DOMAIN = "__SAVES_DOMAIN__"
+TURNSTILE_SITEKEY = "__TURNSTILE_SITEKEY__"
+MAX_UPLOAD_BYTES = __MAX_UPLOAD_BYTES__
+PRESIGN_EXPIRY_SECONDS = __PRESIGN_EXPIRY_SECONDS__
+RATE_LIMIT_MAX = __RATE_LIMIT_MAX__
+RATE_LIMIT_WINDOW_SECONDS = __RATE_LIMIT_WINDOW_SECONDS__
+DEFAULT_LABELS = __DEFAULT_LABELS__
+COMPRESS_IN_BROWSER = __COMPRESS_IN_BROWSER__
+R2_ACCOUNT_ID = "__R2_ACCOUNT_ID__"
+R2_BUCKET = "__R2_BUCKET__"
+MODS = __MODS__

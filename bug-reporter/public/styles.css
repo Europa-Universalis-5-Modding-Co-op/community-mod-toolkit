@@ -1,0 +1,263 @@
+:root {
+  --bg: #14161a;
+  --card: #1d2026;
+  --card-2: #23272f;
+  --text: #e7e9ee;
+  --muted: #9aa1ad;
+  --border: #333a45;
+  --accent: #c0894a;
+  --accent-hover: #d49a59;
+  --error: #e06a6a;
+  --success: #5db075;
+  --focus: #6aa3e0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1rem;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+}
+
+.card {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.75rem;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.6rem;
+}
+
+.intro {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+}
+
+.status {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-2);
+  color: var(--muted);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem;
+}
+
+@media (max-width: 540px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
+
+input[type="text"],
+textarea {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  background: var(--card-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+  resize: vertical;
+}
+
+input[type="text"]:focus,
+textarea:focus,
+.drop-zone:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.optional,
+.hint {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.mod-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.badge-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.badge-value {
+  font-weight: 700;
+}
+
+.field-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.req {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.drop-zone {
+  margin-top: 0.4rem;
+  padding: 1.5rem 1rem;
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--card-2);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.drop-zone.dragover {
+  border-color: var(--accent);
+  background: #2a2620;
+}
+
+.drop-hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+.file-name {
+  margin: 0.6rem 0 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.file-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.error {
+  color: var(--error);
+  font-size: 0.9rem;
+  min-height: 1.1em;
+}
+
+.turnstile {
+  min-height: 65px;
+}
+
+.progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.progress-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.progress-track {
+  flex: 1;
+  height: 10px;
+  background: var(--card-2);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+
+.progress-text {
+  font-size: 0.85rem;
+  color: var(--muted);
+  min-width: 3ch;
+  text-align: right;
+}
+
+button {
+  padding: 0.75rem 1rem;
+  background: var(--accent);
+  color: #1a1206;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.result {
+  padding: 0.9rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.result.error {
+  background: #2c1c1c;
+  border: 1px solid var(--error);
+  color: #f0bcbc;
+}
+
+.result.success {
+  background: #1b2a1f;
+  border: 1px solid var(--success);
+  color: #bfe6cb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.result.success a {
+  color: var(--success);
+  font-weight: 700;
+}
