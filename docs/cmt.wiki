@@ -81,7 +81,7 @@ python tools/upload.py --submods           # upload all submods
 |-
 | Change notes || Versioned change notes from <code>assets/workshop/change-notes.bbcode</code>. Each entry starts with a <code># v</code> or <code>[b]v...[/b]</code> header; the entry matching your <code>metadata.json</code> version is uploaded
 |-
-| Version card || Optional game version added to the Workshop title in every language (e.g. <code>[1.2] Mod Name</code>), applied at upload time so it is never translated
+| Version card || Optional game version added to the Workshop title in every language (e.g. <code>[1.3] Mod Name</code>), applied at upload time so it is never translated
 |}
 
 Steam must be running for uploads to work.
