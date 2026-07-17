@@ -46,7 +46,7 @@ The toolkit includes pre-configured <code>.editorconfig</code>, <code>.gitattrib
 |-
 | <code>.editorconfig</code> || Automatically sets UTF-8 BOM encoding on <code>.txt</code>, <code>.yml</code>, and <code>.gui</code> files, LF line endings, and indentation (tabs for script, 1-space for localization YAML) to match Paradox's style.
 |-
-| <code>.gitattributes</code> || Similar to editorconfig just acting on git.
+| <code>.gitattributes</code> || Normalizes line endings at the Git level, even for contributors without EditorConfig support.
 |-
 | <code>.gitignore</code> || Excludes IDE directories, <code>.env</code> (API keys), Python cache, and other files that shouldn't be committed.
 |-
@@ -79,7 +79,7 @@ python tools/upload.py --submods           # upload all submods
 |-
 | Auto-creation || Set Workshop item ID to <code>0</code> to create a new item on first upload
 |-
-| Change notes || Versioned change notes from <code>assets/workshop/change-notes.bbcode</code>. Each entry starts with a <code># v</code> or <code>[b]v...[/b]</code> header; the entry matching your <code>metadata.json</code> version is uploaded. <code># v1.0:</code> headers (with colon) prepend <code>[b]v1.0:[/b]</code>; without a colon, only the body is uploaded. <code>[b]v1.0:[/b]</code> and <code>[b]v1.0[/b]</code> headers always prepend the version line as-is
+| Change notes || Versioned change notes from <code>assets/workshop/change-notes.bbcode</code>. Each entry starts with a <code># v</code> or <code>[b]v...[/b]</code> header; the entry matching your <code>metadata.json</code> version is uploaded
 |-
 | Version card || Optional game version added to the Workshop title in every language (e.g. <code>[1.2] Mod Name</code>), applied at upload time so it is never translated
 |}
@@ -133,7 +133,7 @@ It tracks <code>type</code>, <code>template</code>, and top-level widget definit
 See the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/GUI-Update-Tool GUI Update Tool] wiki page for the full workflow.
 
 = CMM Visual Editor =
-A browser-based visual editor for creating [[Community Mod Menu]] settings without writing code. It generates all necessary Paradox script and localization files automatically.
+A browser-based visual editor for creating [[Community Mod Menu]] settings without scripting by hand. It generates all necessary Paradox script and localization files automatically.
 
 <syntaxhighlight lang="powershell">
 tools\cmm-visual-editor.bat
