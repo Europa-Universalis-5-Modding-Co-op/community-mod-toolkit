@@ -38,4 +38,4 @@ This is a companion to the [Community Mod Framework](https://github.com/Europa-U
 
 ## License
 
-GNU General Public License v3.0 &mdash; see [LICENSE](LICENSE) for details.
+GNU General Public License v3.0 - see [LICENSE](LICENSE) for details.
