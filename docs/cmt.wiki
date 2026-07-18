@@ -19,18 +19,18 @@ The tools share a common configuration (<code>tools/config.toml</code>) and proj
 CMT is available on [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit GitHub]. For full documentation, see the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki GitHub wiki].
 
 = Setup =
-From the root of your mod's Git repository:
+From the root of your mod folder:
 <syntaxhighlight lang="bash">
 curl.exe -sL https://raw.githubusercontent.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/toolkit-release/tools/setup.py -o setup.py
 python setup.py
 </syntaxhighlight>
 
-This copies all toolkit files into your mod folder, installs Python dependencies, and adds the toolkit as a Git remote for easy updating. The script will not overwrite existing files.
+This copies all toolkit files into your mod folder, installs Python dependencies, and links the toolkit's Git history for easy updating. The script will not overwrite existing files.
 
 To update the toolkit later:
 <syntaxhighlight lang="bash">
-git fetch cmt
-git merge cmt/toolkit-release --no-edit
+git fetch https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit.git toolkit-release
+git merge FETCH_HEAD --no-edit
 </syntaxhighlight>
 
 = Mod Template =
