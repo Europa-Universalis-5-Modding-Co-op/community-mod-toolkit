@@ -21,8 +21,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # A workflow-scoped PAT, since GITHUB_TOKEN cannot push a branch
-          # carrying .github/workflows/cmt-create-release.yml.
+          # A PAT with Contents and Workflows write access, since GITHUB_TOKEN
+          # cannot push a branch carrying .github/workflows/cmt-create-release.yml.
           token: ${{ secrets.CMT_RELEASE_TOKEN }}
 
       - name: Configure git
