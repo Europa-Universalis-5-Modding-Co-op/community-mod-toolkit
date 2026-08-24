@@ -1,4 +1,4 @@
-name: Create Release
+name: Create Toolkit Release
 
 on:
   push:
@@ -21,6 +21,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # A workflow-scoped PAT, since GITHUB_TOKEN cannot push a branch
+          # carrying .github/workflows/cmt-create-release.yml.
+          token: ${{ secrets.CMT_RELEASE_TOKEN }}
 
       - name: Configure git
         run: |
@@ -84,34 +87,38 @@ jobs:
           # Overwrite with source branch
           git checkout "$SOURCE" -- .
 
-          # Remove dev-only files
+          # Remove toolkit-only files, keeping the release workflow mods use
           git rm -f README.md
           git rm -rf docs/
           git rm -f assets/images/mod-id-location.png
-          git rm -rf .github/
+          git rm -f .github/workflows/_cmt-create-release.yml
           git mv -f README-TEMPLATE.md README.md
 
-          # Reset Workshop item ID
+          # Reset Workshop item IDs
           config_path="tools/config.toml"
-          awk '
-          BEGIN { updated = 0 }
-          /^[[:space:]]*workshop_upload_item_id[[:space:]]*=/ {
-            match($0, /^[[:space:]]*workshop_upload_item_id[[:space:]]*=[[:space:]]*/)
-            prefix = substr($0, RSTART, RLENGTH)
-            rest = substr($0, RSTART + RLENGTH)
-            sub(/^[^#[:space:]]+/, "", rest)
-            print prefix "0" rest
-            updated = 1
-            next
-          }
-          { print }
-          END {
-            if (!updated) {
-              print "workshop_upload_item_id = 0"
+          reset_item_id() {
+            awk -v key="$1" '
+            BEGIN { updated = 0; pattern = "^[[:space:]]*" key "[[:space:]]*=" }
+            $0 ~ pattern {
+              match($0, pattern "[[:space:]]*")
+              prefix = substr($0, RSTART, RLENGTH)
+              rest = substr($0, RSTART + RLENGTH)
+              sub(/^[^#[:space:]]+/, "", rest)
+              print prefix "0" rest
+              updated = 1
+              next
             }
+            { print }
+            END {
+              if (!updated) {
+                print key " = 0"
+              }
+            }
+            ' "$config_path" > "${config_path}.tmp"
+            mv "${config_path}.tmp" "$config_path"
           }
-          ' "$config_path" > "${config_path}.tmp"
-          mv "${config_path}.tmp" "$config_path"
+          reset_item_id workshop_upload_item_id
+          reset_item_id workshop_upload_item_id_dev
           git add "$config_path"
 
           # Commit and push

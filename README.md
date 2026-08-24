@@ -15,6 +15,7 @@ This is a companion to the [Community Mod Framework](https://github.com/Europa-U
 | [Upload Tool](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/Upload-Tool) | Build a minimal release folder and upload to Steam Workshop. Supports dev/release separation, workshop page updates, change notes, submods, and version-gated uploads. |
 | [Translation Tool](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/Translation-Tool) | Auto-translate localization files and Workshop titles/descriptions using DeepL or Gemini. |
 | [GUI Update Tool](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/GUI-Update-Tool) | Track the vanilla GUI definitions your mod overrides and three-way merge vanilla changes into them after each game update. |
+| [Release Workflow](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/Release-Workflow) | Publish to the Steam Workshop and cut a GitHub release from GitHub Actions, on a manual run or automatically on a push or merged pull request. Separate release and dev channels. |
 | [CMM Visual Editor](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/CMM-Visual-Editor) | Browser-based visual editor for creating [Community Mod Menu](https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-framework/wiki/Community-Mod-Menu) settings without scripting by hand. |
 
 ## Quick Start
