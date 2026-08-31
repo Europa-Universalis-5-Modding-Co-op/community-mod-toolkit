@@ -100,6 +100,7 @@ jobs:
         env:
           WORKSHOP_USERNAME: ${{ secrets.WORKSHOP_USERNAME }}
           WORKSHOP_PASSWORD: ${{ secrets.WORKSHOP_PASSWORD }}
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
         run: |
           python3 tools/ci_release.py gate \
             --event "${{ github.event_name }}" \
@@ -247,7 +248,7 @@ jobs:
           WORKSHOP_USERNAME: ${{ secrets.WORKSHOP_USERNAME }}
           WORKSHOP_PASSWORD: ${{ secrets.WORKSHOP_PASSWORD }}
         run: |
-          steamcmd +login "$WORKSHOP_USERNAME" "$WORKSHOP_PASSWORD" \
+          steamcmd +login "$WORKSHOP_USERNAME" ${WORKSHOP_PASSWORD:+"$WORKSHOP_PASSWORD"} \
             +workshop_build_item "${{ steps.metadata.outputs.path }}" +quit
 
         # SteamCMD writes the item's default language page only. Translated pages
@@ -270,7 +271,7 @@ jobs:
           WORKSHOP_USERNAME: ${{ secrets.WORKSHOP_USERNAME }}
           WORKSHOP_PASSWORD: ${{ secrets.WORKSHOP_PASSWORD }}
         run: |
-          steamcmd +login "$WORKSHOP_USERNAME" "$WORKSHOP_PASSWORD" \
+          steamcmd +login "$WORKSHOP_USERNAME" ${WORKSHOP_PASSWORD:+"$WORKSHOP_PASSWORD"} \
             +workshop_build_item "${{ steps.page.outputs.path }}" +quit
           echo "# Workshop Description" >> "$GITHUB_STEP_SUMMARY"
           echo "Uploaded the ${{ steps.page.outputs.language }} Workshop description." >> "$GITHUB_STEP_SUMMARY"
@@ -292,7 +293,7 @@ jobs:
           while IFS= read -r vdf; do
             [ -n "$vdf" ] || continue
             echo "Uploading $(basename "$vdf")..."
-            steamcmd +login "$WORKSHOP_USERNAME" "$WORKSHOP_PASSWORD" \
+            steamcmd +login "$WORKSHOP_USERNAME" ${WORKSHOP_PASSWORD:+"$WORKSHOP_PASSWORD"} \
               +workshop_build_item "$vdf" +quit
           done < "${{ steps.submods.outputs.list-file }}"
 
