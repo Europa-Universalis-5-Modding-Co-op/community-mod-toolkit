@@ -64,6 +64,7 @@ python tools/upload.py --mod               # upload mod content only
 python tools/upload.py --workshop-pages    # upload workshop pages only
 python tools/upload.py --dev               # upload to dev Workshop item
 python tools/upload.py --submods           # upload all submods
+python tools/upload.py --mod --sync-gallery # replace Workshop gallery images
 </syntaxhighlight>
 
 {| class="wikitable"
@@ -79,8 +80,22 @@ python tools/upload.py --submods           # upload all submods
 |-
 | Auto-creation || Set Workshop item ID to <code>0</code> to create a new item on first upload
 |-
+| Gallery images || Explicitly synchronize <code>assets/workshop/gallery/</code> as additional Workshop image previews; preserve the primary thumbnail and non-image previews
+|-
 | Change notes || Versioned change notes from <code>assets/workshop/change-notes.bbcode</code>. Each entry starts with a <code># v</code> or <code>[b]v...[/b]</code> header; the entry matching your <code>metadata.json</code> version is uploaded. <code># v1.0:</code> headers (with colon) prepend <code>[b]v1.0:[/b]</code>; without a colon, only the body is uploaded. <code>[b]v1.0:[/b]</code> and <code>[b]v1.0[/b]</code> headers always prepend the version line as-is
 |}
+
+Gallery synchronization is opt-in and requires a mod upload. Store JPG, JPEG,
+or PNG files under <code>assets/workshop/gallery/</code>; each file must be
+non-empty and smaller than 1,000,000 bytes. Images are synchronized in
+alphabetical order. Missing, empty, unsupported, or oversized galleries are
+rejected before upload. Repeated synchronization replaces the existing image
+previews while preserving the primary thumbnail and video previews.
+
+The gallery adapter in <code>tools/workshop_gallery.py</code> calls the
+additional-preview functions from the packaged Steam API library. It is kept
+separate from the bundled SteamworksPy package and does not modify its source
+or binaries.
 
 Steam must be running for uploads to work.
 
@@ -141,11 +156,15 @@ The launcher automatically installs Python and pipx if needed. See the [[Communi
 |-
 | <code>workshop_upload_item_id</code> || <code>0</code> || Workshop item ID (<code>0</code> creates a new item)
 |-
-| <code>upload_mod_by_default</code> || <code>true</code> || Upload mod files by default
+| <code>upload_mod_by_default</code> || <code>false</code> || Upload mod files by default
 |-
-| <code>upload_workshop_pages_by_default</code> || <code>true</code> || Upload workshop pages by default
+| <code>upload_workshop_pages_by_default</code> || <code>false</code> || Upload workshop pages by default
 |-
 | <code>upload_only_on_version_change</code> || <code>false</code> || Only upload when version changes
+|-
+| <code>upload_change_notes_by_default</code> || <code>false</code> || Upload change notes by default
+|-
+| <code>upload_submods_by_default</code> || <code>false</code> || Upload submods by default
 |}
 
 See the [https://github.com/Europa-Universalis-5-Modding-Co-op/community-mod-toolkit/wiki/Configuration Configuration] wiki page for the full reference.
