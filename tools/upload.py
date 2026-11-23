@@ -17,9 +17,16 @@ sys.path.insert(0, DEPENDENCIES_DIR)
 
 from steamworks import STEAMWORKS
 from steamworks.enums import EItemUpdateStatus, EResult, EWorkshopFileType
+from workshop_gallery import (
+    GALLERY_DIRECTORY,
+    SteamUGCGalleryApi,
+    collect_gallery_images,
+    replace_gallery_previews,
+)
 
 # --- User Configuration ---
 SOURCES = [
+    "dlc",
     "in_game",
     "main_menu",
 	"loading_screen"
@@ -688,7 +695,9 @@ def build_release(dev_mode=False, dev_name=None):
         base_name = resolved_dev_name if dev_mode else raw_name
         clean_name = base_name.removesuffix(" Dev")
 
-        clean_name = clean_name.lower().replace(" ", "-")
+        clean_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "-", clean_name.lower().replace(" ", "-")).strip(" .")
+        if not clean_name:
+            raise ValueError("Mod name has no valid characters for a release folder")
         target_folder_name = f"{clean_name}-dev" if dev_mode else f"{clean_name}-release"
     else:
         raise FileNotFoundError(f"Metadata file not found at {dev_meta_path}")
@@ -820,12 +829,31 @@ def _submit_and_wait(steam, handle, change_note="", show_progress=False):
 
     return True
 
-def upload_release(steam, content_dir, preview_path, item_id, workshop_title=None, change_note=""):
+def upload_release(
+    steam,
+    content_dir,
+    preview_path,
+    item_id,
+    workshop_title=None,
+    change_note="",
+    gallery_images=None,
+):
     if not os.path.isdir(content_dir):
         print(f"Error: Release directory not found: {content_dir}")
         return False
 
     workshop = steam.Workshop
+    gallery_api = None
+    if gallery_images:
+        try:
+            gallery_api = SteamUGCGalleryApi(
+                steam,
+                os.path.join(DEPENDENCIES_DIR, "steam_api64.dll"),
+            )
+        except RuntimeError as error:
+            print(f"Error: {error}")
+            return False
+
     handle = workshop.StartItemUpdate(APP_ID, item_id)
     if not handle:
         print("Error: StartItemUpdate failed. Check app ID and item ID.")
@@ -846,6 +874,18 @@ def upload_release(steam, content_dir, preview_path, item_id, workshop_title=Non
         preview_result = workshop.SetItemPreview(handle, preview_path)
         if preview_result is False:
             print("Error: SetItemPreview failed.")
+            return False
+
+    if gallery_images:
+        try:
+            replace_gallery_previews(
+                gallery_api,
+                handle,
+                item_id,
+                gallery_images,
+            )
+        except RuntimeError as error:
+            print(f"Error: {error}")
             return False
 
     print("Workshop update submitted. Waiting for upload to complete...")
@@ -1211,6 +1251,11 @@ def parse_args():
         action="store_true",
         help="Upload change notes. When set, config default target settings are ignored."
     )
+    parser.add_argument(
+        "--sync-gallery",
+        action="store_true",
+        help="Replace the Workshop item's image previews using assets/workshop/gallery."
+    )
     return parser.parse_args()
 
 def main():
@@ -1222,6 +1267,17 @@ def main():
     upload_mod, upload_workshop_pages, upload_submods_selected, upload_change_notes = resolve_upload_targets(args, config)
     if upload_mod is None:
         return 1
+    if args.sync_gallery and not upload_mod:
+        print("Error: --sync-gallery requires a mod upload.")
+        return 1
+
+    gallery_images = []
+    if args.sync_gallery:
+        try:
+            gallery_images = collect_gallery_images(GALLERY_DIRECTORY)
+        except (OSError, ValueError) as error:
+            print(f"Error: {error}")
+            return 1
 
     upload_only_on_version_change = load_optional_bool(config, UPLOAD_ON_VERSION_CHANGE_KEY, False)
     if upload_only_on_version_change is None:
@@ -1243,7 +1299,14 @@ def main():
         main_version = load_metadata_version(METADATA_PATH, "main mod")
         if main_version is None:
             return 1
-        if not should_upload_for_version(version_cache, main_cache_key, main_version):
+        if (
+            not args.sync_gallery
+            and not should_upload_for_version(
+                version_cache,
+                main_cache_key,
+                main_version,
+            )
+        ):
             print(f"Skipping main mod upload: version '{main_version}' already uploaded.")
             upload_mod_effective = False
     if upload_change_notes and main_version is None:
@@ -1284,7 +1347,8 @@ def main():
 
         if upload_mod_effective:
             if not upload_release(steam, release_dir, preview_path, item_id,
-                                  workshop_title, change_note=change_note):
+                                  workshop_title, change_note=change_note,
+                                  gallery_images=gallery_images):
                 return 1
             uploaded_main = True
 
